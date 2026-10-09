@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#10091f">
+  <meta name="description" content="大帆帆与小颜颜的手机街机格斗小游戏">
+  <title>帆颜乱斗场</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%2310091f'/%3E%3Cpath d='M14 40c8-21 28-21 36 0' fill='none' stroke='%23ffd84d' stroke-width='8' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='22' r='7' fill='%23ff4f7b'/%3E%3Ccircle cx='42' cy='22' r='7' fill='%2359e8ff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="game-shell" id="gameShell">
+    <canvas id="gameCanvas" width="1280" height="720" aria-label="格斗游戏画面"></canvas>
+
+    <section class="select-screen" id="selectScreen" aria-labelledby="gameTitle">
+      <div class="select-copy">
+        <p class="eyebrow">MOBILE ARCADE · 单人对战</p>
+        <h1 id="gameTitle">帆颜乱斗场</h1>
+        <p class="select-tip">选择你的角色，另一位将由电脑控制</p>
+      </div>
+      <div class="fighter-cards">
+        <button class="fighter-card fan" data-fighter="fan" aria-label="选择大帆帆">
+          <span class="card-number">01</span>
+          <img src="dafanfan.png" alt="大帆帆">
+          <span class="fighter-name">大帆帆</span>
+          <span class="fighter-trait">力量型 · 上勾拳伤害高</span>
+          <span class="pick-label">选择角色</span>
+        </button>
+        <div class="versus" aria-hidden="true">VS</div>
+        <button class="fighter-card yan" data-fighter="yan" aria-label="选择小颜颜">
+          <span class="card-number">02</span>
+          <img src="xiaoyanyan.png" alt="小颜颜">
+          <span class="fighter-name">小颜颜</span>
+          <span class="fighter-trait">灵巧型 · 空中招式迅捷</span>
+          <span class="pick-label">选择角色</span>
+        </button>
+      </div>
+      <div class="move-legend">
+        <span><b>摇杆＋拳</b> 上：超级上勾拳</span>
+        <span><b>摇杆＋腿</b> 下：雷霆扫堂腿 · 上：螺旋大跳下劈腿</span>
+      </div>
+    </section>
+
+    <div class="touch-controls hidden" id="touchControls" aria-label="游戏控制器">
+      <div class="joystick-wrap">
+        <div class="joystick" id="joystick" role="application" aria-label="方向摇杆">
+          <div class="joystick-rings"></div>
+          <div class="stick" id="stick"></div>
+        </div>
+        <span>移动摇杆</span>
+      </div>
+      <div class="attack-pad">
+        <button class="action-button guard" id="guardBtn" aria-label="格挡"><span>挡</span><small>GUARD</small></button>
+        <button class="action-button punch" id="punchBtn" aria-label="拳击"><span>拳</span><small>PUNCH</small></button>
+        <button class="action-button kick" id="kickBtn" aria-label="踢腿"><span>腿</span><small>KICK</small></button>
+      </div>
+    </div>
+
+    <button class="pause-button hidden" id="pauseBtn" aria-label="暂停游戏">Ⅱ</button>
+
+    <section class="result-screen hidden" id="resultScreen" aria-live="polite">
+      <p class="result-kicker" id="resultKicker">K.O.</p>
+      <h2 id="resultTitle">大帆帆胜利</h2>
+      <p id="resultDetail">漂亮的一击！</p>
+      <div class="result-actions">
+        <button id="rematchBtn">再来一局</button>
+        <button class="secondary" id="changeBtn">重选角色</button>
+      </div>
+    </section>
+
+    <div class="rotate-notice">
+      <div class="phone-icon" aria-hidden="true">▯</div>
+      <strong>请横屏游玩</strong>
+      <span>横过手机，擂台马上开打</span>
+    </div>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
