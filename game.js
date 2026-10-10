@@ -17,8 +17,16 @@
 
   const W = 1280, H = 720, FLOOR = 610;
   const images = { fan: new Image(), yan: new Image() };
-  images.fan.src = "dafanfan.png";
-  images.yan.src = "xiaoyanyan.png";
+  images.fan.src = "dafanfan-fight-sprites.png";
+  images.yan.src = "xiaoyanyan-fight-sprites.png";
+
+  // Each 3D-rendered sheet is a 4x2 grid: idle, walk, punch, kick,
+  // uppercut, sweep, airborne axe kick and guard. Keeping the fighter
+  // camera side-on makes every attack silhouette match its hit box.
+  const poseFrame = {
+    idle: 0, walk: 1, punch: 2, body: 2, kick: 3,
+    uppercut: 4, sweep: 5, axe: 6, dash: 3, guard: 7
+  };
 
   const roster = {
     fan: { name: "大帆帆", color: "#ff4f7b", accent: "#ffb13b", speed: 280, power: 1.08, scale: 1.03 },
@@ -126,7 +134,13 @@
     if (!blocked) { target.stun = move.special ? .4 : .22; target.vy = -(move.launch || 34); }
     attacker.energy = Math.min(100, attacker.energy + (blocked ? 4 : move.damage * 1.35));
     shake = blocked ? 5 : (move.special ? 17 : 10); freeze = blocked ? .025 : .055;
-    burst((attacker.x + target.x) / 2, Math.min(attacker.y, target.y) - 205, move.color, blocked ? 8 : 18);
+    const strikeY = attacker.action === "sweep" ? attacker.y - 72
+      : attacker.action === "uppercut" ? attacker.y - 285
+      : attacker.action === "axe" ? attacker.y - 135
+      : attacker.action === "kick" || attacker.action === "dash" ? attacker.y - 210
+      : attacker.y - 245;
+    const strikeX = attacker.x + attacker.facing * Math.min(move.reach * .72, Math.abs(target.x - attacker.x) * .58);
+    burst(strikeX, strikeY, move.color, blocked ? 8 : 18);
     announce = { text: blocked ? "格挡！" : move.label, color: blocked ? "#59e8ff" : move.color, life: .72, owner: attacker };
     if (target.hp <= 0) finish(attacker);
   }
@@ -177,25 +191,71 @@
   }
 
   function drawFighter(f, t) {
-    const img = images[f.id]; if (!img.complete) return;
-    let height = (f.id === "fan" ? 405 : 430) * f.scale, width = height * (img.naturalWidth / img.naturalHeight);
-    let angle = 0, dx = 0, dy = Math.sin(t * 5 + (f.isPlayer ? 0 : 2)) * 4, sx = 1, sy = 1;
-    if (f.guard) { sx = .9; sy = 1.03; angle = -f.facing * .08; }
+    const img = images[f.id];
+    if (!img.complete || !img.naturalWidth) return;
+
+    let pose = f.guard ? "guard" : f.action;
+    if (pose === "idle" && (Math.abs(f.vx) > 22 || Math.abs(f.isPlayer ? input.x : f.aiX) > .2)) pose = "walk";
+    const frame = poseFrame[pose] ?? 0;
+    const col = frame % 4, row = Math.floor(frame / 4);
+    const cellW = img.naturalWidth / 4, cellH = img.naturalHeight / 2;
+    const height = (f.id === "fan" ? 500 : 470) * f.scale;
+    const width = height * (cellW / cellH);
+
+    let p = 0, snap = 0, dx = 0, dy = 0, angle = 0, sx = 1, sy = 1;
     if (f.action !== "idle") {
-      const m = moves[f.action], p = Math.min(1, f.actionTime / m.duration), snap = Math.sin(p * Math.PI);
-      if (f.action === "punch" || f.action === "body") { dx = f.facing * 55 * snap; sx = 1 + .12 * snap; angle = f.facing * .1 * snap; }
-      if (f.action === "kick") { dx = f.facing * 36 * snap; angle = f.facing * .26 * snap; sx = 1.08; }
-      if (f.action === "sweep") { dy = 48 * snap; angle = -f.facing * .62 * snap; sy = .86; }
-      if (f.action === "uppercut") { angle = f.facing * .16 * snap; sx = .92; sy = 1.12; }
-      if (f.action === "axe") { angle = f.facing * Math.PI * 1.55 * p; }
-      if (f.action === "dash") { angle = f.facing * .42 * snap; sx = 1.12; }
+      const m = moves[f.action];
+      p = Math.min(1, f.actionTime / m.duration);
+      snap = Math.sin(p * Math.PI);
+      if (f.action === "punch" || f.action === "body") dx = f.facing * 24 * snap;
+      if (f.action === "kick") dx = f.facing * 18 * snap;
+      if (f.action === "sweep") { dx = f.facing * 10 * snap; sy = .97; }
+      if (f.action === "uppercut") { dx = f.facing * 14 * snap; sy = 1.03; }
+      if (f.action === "dash") { dx = f.facing * 28 * snap; angle = f.facing * -.035 * snap; }
+      if (f.action === "axe") angle = f.facing * -.08 * Math.sin(p * Math.PI * 2);
+    } else {
+      dy = Math.sin(t * 4.8 + (f.isPlayer ? 0 : 2.4)) * 3;
+      if (pose === "walk") dx = Math.sin(t * 11) * 4;
     }
-    ctx.save(); ctx.translate(f.x + dx, f.y + dy); ctx.scale(f.facing * sx, sy); ctx.rotate(angle);
-    ctx.globalAlpha = .28; ctx.fillStyle = f.color; ctx.beginPath(); ctx.ellipse(0, 8, width * .65, 26, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    if (f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0) ctx.filter = "brightness(2.4) saturate(.25)";
-    ctx.drawImage(img, -width / 2, -height, width, height); ctx.restore(); ctx.filter = "none";
-    if (f.guard) { ctx.save(); ctx.strokeStyle = "rgba(89,232,255,.82)"; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(f.x + f.facing * 15, f.y - 210, 105, -1.25, 1.25); ctx.stroke(); ctx.restore(); }
+
+    ctx.save();
+    ctx.translate(f.x + dx, f.y + 6);
+    ctx.scale(1, .32);
+    const shadow = ctx.createRadialGradient(0, 0, 10, 0, 0, width * .48);
+    shadow.addColorStop(0, "rgba(0,0,0,.62)"); shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow; ctx.beginPath(); ctx.ellipse(0, 0, width * .52, 64, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(f.x + dx, f.y + dy);
+    ctx.scale(f.facing * sx, sy);
+    ctx.rotate(angle);
+
+    // A dark offset pass plus a colored rim gives the transparent 3D render
+    // depth against the arena without changing the character artwork.
+    ctx.save();
+    ctx.globalAlpha = .42;
+    ctx.filter = `blur(9px) drop-shadow(0 0 18px ${f.color})`;
+    ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 + f.facing * 4, -height + 7, width, height);
+    ctx.restore();
+
+    if (f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0) ctx.filter = "brightness(2.25) saturate(.35)";
+    else ctx.filter = "drop-shadow(0 15px 11px rgba(0,0,0,.5))";
+    ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2, -height, width, height);
+
+    if (f.action !== "idle" && snap > .45) {
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = .13 * snap;
+      ctx.filter = `blur(3px) drop-shadow(0 0 12px ${moves[f.action].color})`;
+      ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 - f.facing * 20, -height, width, height);
+    }
+    ctx.restore(); ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+
+    if (f.guard) {
+      ctx.save(); ctx.strokeStyle = "rgba(89,232,255,.85)"; ctx.lineWidth = 8;
+      ctx.shadowColor = "#59e8ff"; ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.arc(f.x + f.facing * 32, f.y - 235, 112, -1.28, 1.28); ctx.stroke(); ctx.restore();
+    }
   }
 
   function drawHUD() {
