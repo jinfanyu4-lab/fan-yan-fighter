@@ -50,17 +50,17 @@
   };
 
   let player, enemy, mode = "select", paused = false, last = performance.now();
-  let timer = 60, shake = 0, freeze = 0, announce = null, aiClock = 0, ultimateFX = null;
-  const particles = [], hitBursts = [];
+  let timer = 60, shake = 0, freeze = 0, announce = null, aiClock = 0, ultimateFX = null, impactFlash = 0;
+  const particles = [], hitBursts = [], damageTexts = [];
   const input = { x: 0, y: 0, guard: false, keys: new Set() };
 
   class Fighter {
     constructor(id, x, isPlayer) {
       Object.assign(this, roster[id]);
       this.id = id; this.x = x; this.y = FLOOR; this.isPlayer = isPlayer;
-      this.vx = 0; this.vy = 0; this.hp = 100; this.energy = isPlayer ? 100 : 35;
+      this.vx = 0; this.vy = 0; this.hp = 100; this.displayHp = 100; this.energy = isPlayer ? 100 : 35;
       this.facing = isPlayer ? 1 : -1; this.action = "idle"; this.actionTime = 0;
-      this.hitDone = false; this.guard = false; this.hitFlash = 0; this.stun = 0;
+      this.hitDone = false; this.guard = false; this.hitFlash = 0; this.hitReact = 0; this.hitReactMax = 0; this.hitDir = 0; this.stun = 0;
       this.aiX = 0; this.aiGuard = false;
     }
     startAttack(name) {
@@ -81,7 +81,7 @@
     enemy = new Fighter(rivals[Math.floor(Math.random() * rivals.length)], 950, false);
     selectScreen.classList.add("hidden"); resultScreen.classList.add("hidden");
     touchControls.classList.remove("hidden"); pauseBtn.classList.remove("hidden");
-    mode = "countdown"; paused = false; timer = 60; shake = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0;
+    mode = "countdown"; paused = false; timer = 60; shake = 0; impactFlash = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0; damageTexts.length = 0;
     superBtn.classList.remove("ready");
     announce = { text: "准备！", color: "#ffd84d", life: 1.05, big: true };
     setTimeout(() => { if (mode === "countdown") { mode = "fight"; announce = { text: "开打！", color: "#ffffff", life: .85, big: true }; } }, 1050);
@@ -104,6 +104,8 @@
 
   function updateFighter(f, other, dt) {
     f.hitFlash = Math.max(0, f.hitFlash - dt * 4);
+    f.hitReact = Math.max(0, f.hitReact - dt);
+    if (f.displayHp > f.hp) f.displayHp = Math.max(f.hp, f.displayHp - dt * 22);
     f.stun = Math.max(0, f.stun - dt);
     if (mode === "fight" && f.action !== "ultimate") f.energy = Math.min(100, f.energy + dt * 8);
     const moveX = f.isPlayer ? input.x : f.aiX;
@@ -151,11 +153,19 @@
     const damage = move.damage * attacker.power * (blocked ? .22 : 1);
     target.hp = Math.max(0, target.hp - damage);
     target.hitFlash = 1;
+    target.hitReactMax = blocked ? .18 : move.ultimate ? .62 : move.special ? .42 : .3;
+    target.hitReact = target.hitReactMax;
+    target.hitDir = attacker.facing;
     target.vx = attacker.facing * move.knock * (blocked ? 2.2 : 4.1);
-    if (!blocked) { target.stun = move.special ? .4 : .22; target.vy = -(move.launch || 34); }
+    if (!blocked) {
+      target.stun = move.ultimate ? .62 : move.special ? .4 : .22;
+      target.vy = -(move.launch || 34);
+      if (target.action !== "ultimate") { target.action = "idle"; target.actionTime = 0; target.hitDone = false; }
+    }
     if (!move.ultimate) attacker.energy = Math.min(100, attacker.energy + (blocked ? 10 : move.damage * 2.2));
     target.energy = Math.min(100, target.energy + damage * 1.25);
     shake = blocked ? 5 : (move.ultimate ? 28 : move.special ? 17 : 10); freeze = blocked ? .025 : move.ultimate ? .12 : .055;
+    impactFlash = Math.max(impactFlash, blocked ? .12 : move.ultimate ? .62 : move.special ? .38 : .24);
     const strikeY = attacker.action === "sweep" ? attacker.y - 72
       : attacker.action === "uppercut" ? attacker.y - 285
       : attacker.action === "axe" ? attacker.y - 135
@@ -163,6 +173,7 @@
       : attacker.y - 245;
     const strikeX = attacker.x + attacker.facing * Math.min(move.reach * .72, Math.abs(target.x - attacker.x) * .58);
     burst(strikeX, strikeY, attacker.accent, blocked ? 8 : move.ultimate ? 48 : 18, attacker.effect);
+    damageTexts.push({ x: target.x, y: target.y - 330, value: Math.max(1, Math.round(damage)), blocked, color: blocked ? "#67eeff" : move.ultimate ? "#ffd84d" : "#ffffff", life: .82, max: .82 });
     announce = { text: blocked ? "格挡！" : move.ultimate ? attacker.ultimate : move.label, color: blocked ? "#59e8ff" : attacker.accent, life: move.ultimate ? 1.05 : .72, owner: attacker };
     if (target.hp <= 0) finish(attacker);
   }
@@ -218,6 +229,7 @@
     if (!img.complete || !img.naturalWidth) return;
 
     let pose = f.guard ? "guard" : f.action === "ultimate" ? f.ultimatePose : f.action;
+    if (f.hitReact > 0 && !f.guard) pose = "idle";
     if (pose === "idle" && (Math.abs(f.vx) > 22 || Math.abs(f.isPlayer ? input.x : f.aiX) > .2)) pose = "walk";
     const frame = poseFrame[pose] ?? 0;
     const col = frame % 4, row = Math.floor(frame / 4);
@@ -247,6 +259,16 @@
       if (pose === "walk") dx = Math.sin(t * 11) * 4;
     }
 
+    if (f.hitReact > 0) {
+      const hitP = 1 - f.hitReact / Math.max(.001, f.hitReactMax);
+      const recoil = Math.sin(hitP * Math.PI);
+      dx += f.hitDir * 34 * recoil;
+      dy += 8 * recoil;
+      angle += f.hitDir * .13 * recoil;
+      sx *= 1 + .055 * recoil;
+      sy *= 1 - .075 * recoil;
+    }
+
     ctx.save();
     ctx.translate(f.x + dx, f.y + 6);
     ctx.scale(1, .32);
@@ -268,9 +290,19 @@
     ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 + f.facing * 4, -height + 7, width, height);
     ctx.restore();
 
-    if (f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0) ctx.filter = "brightness(2.25) saturate(.35)";
+    if (f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0) ctx.filter = "brightness(2.6) saturate(.25) contrast(1.25)";
     else ctx.filter = "drop-shadow(0 15px 11px rgba(0,0,0,.5))";
     ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2, -height, width, height);
+
+    if (f.hitReact > 0) {
+      const hitAlpha = Math.min(.58, f.hitReact / Math.max(.001, f.hitReactMax));
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = hitAlpha;
+      ctx.filter = "sepia(1) saturate(10) hue-rotate(320deg) brightness(1.8)";
+      ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2, -height, width, height);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+    }
 
     if (f.action !== "idle" && snap > .45) {
       ctx.globalCompositeOperation = "screen";
@@ -279,6 +311,15 @@
       ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 - f.facing * 20, -height, width, height);
     }
     ctx.restore(); ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+
+    if (f.hitReact > 0) {
+      const k = f.hitReact / Math.max(.001, f.hitReactMax);
+      ctx.save(); ctx.translate(f.x, f.y - 225); ctx.globalAlpha = k * .7;
+      ctx.strokeStyle = "#ff365f"; ctx.lineWidth = 8 * k; ctx.shadowColor = "#ff365f"; ctx.shadowBlur = 24;
+      ctx.beginPath(); ctx.arc(0, 0, 94 + (1 - k) * 70, 0, Math.PI * 2); ctx.stroke();
+      for (let n = 0; n < 6; n++) { const a = n / 6 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 74, Math.sin(a) * 110); ctx.lineTo(Math.cos(a) * (112 + (1 - k) * 70), Math.sin(a) * (158 + (1 - k) * 70)); ctx.stroke(); }
+      ctx.restore();
+    }
 
     if (f.guard) {
       ctx.save(); ctx.strokeStyle = f.accent; ctx.globalAlpha = .86; ctx.lineWidth = 8;
@@ -299,6 +340,8 @@
 
   function healthBar(x, y, width, amount, f, reverse) {
     ctx.save(); ctx.fillStyle = "rgba(5,3,12,.72)"; roundRect(x, y, width, 30, 12); ctx.fill();
+    const chip = Math.max(0, (width - 8) * f.displayHp / 100); ctx.fillStyle = "rgba(255,65,92,.78)";
+    roundRect(reverse ? x + width - 4 - chip : x + 4, y + 4, chip, 22, 8); ctx.fill();
     const inner = Math.max(0, (width - 8) * amount); ctx.fillStyle = f.color;
     roundRect(reverse ? x + width - 4 - inner : x + 4, y + 4, inner, 22, 8); ctx.fill();
     ctx.fillStyle = "rgba(5,3,12,.82)"; roundRect(x, y + 34, width, 9, 5); ctx.fill();
@@ -337,6 +380,10 @@
 
   function drawEffects(dt) {
     drawUltimateFX(dt);
+    if (impactFlash > 0) {
+      ctx.save(); ctx.globalCompositeOperation = "screen"; ctx.globalAlpha = Math.min(.5, impactFlash); ctx.fillStyle = "#ff294f"; ctx.fillRect(0, 0, W, H); ctx.restore();
+      impactFlash = Math.max(0, impactFlash - dt * 2.8);
+    }
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i]; p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 650 * dt;
       if (p.life <= 0) { particles.splice(i, 1); continue; }
@@ -356,6 +403,13 @@
       else if (b.kind === "goo") { ctx.fillStyle = b.color; for (let n = 0; n < 9; n++) { const q = n / 9 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(q) * (28 + k * 120), Math.sin(q) * (18 + k * 72), 12 * (1 - k), 0, Math.PI * 2); ctx.fill(); } }
       else { for (let n = 0; n < 4; n++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.arc(0, 0, 34 + k * 108 + n * 8, -.7, .7); ctx.stroke(); } }
       ctx.restore();
+    }
+    for (let i = damageTexts.length - 1; i >= 0; i--) {
+      const d = damageTexts[i]; d.life -= dt; d.y -= dt * 74;
+      if (d.life <= 0) { damageTexts.splice(i, 1); continue; }
+      const k = d.life / d.max; ctx.save(); ctx.globalAlpha = Math.min(1, k * 2.6); ctx.textAlign = "center";
+      ctx.font = `1000 ${d.blocked ? 25 : 36}px system-ui`; ctx.fillStyle = d.color; ctx.strokeStyle = "rgba(20,3,14,.9)"; ctx.lineWidth = 8;
+      const text = d.blocked ? `格挡 -${d.value}` : `-${d.value}`; ctx.strokeText(text, d.x, d.y); ctx.fillText(text, d.x, d.y); ctx.restore();
     }
     if (announce) {
       announce.life -= dt; if (announce.life <= 0) announce = null; else {
