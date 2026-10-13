@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#10091f">
-  <meta name="description" content="大帆帆与小颜颜的侧视 3D 手机街机格斗小游戏">
+  <meta name="description" content="四名角色、专属特效与大招的侧视 3D 手机街机格斗游戏">
   <title>雷霆曼巴格斗场</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%2310091f'/%3E%3Cpath d='M14 40c8-21 28-21 36 0' fill='none' stroke='%23ffd84d' stroke-width='8' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='22' r='7' fill='%23ff4f7b'/%3E%3Ccircle cx='42' cy='22' r='7' fill='%2359e8ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
@@ -35,10 +35,25 @@
           <span class="fighter-trait">灵巧型 · 空中招式迅捷</span>
           <span class="pick-label">选择角色</span>
         </button>
+        <button class="fighter-card blob" data-fighter="blob" aria-label="选择黄团团">
+          <span class="card-number">03</span>
+          <img class="sprite-preview" src="huangtuantuan-fight-sprites.png" alt="黄团团">
+          <span class="fighter-name">黄团团</span>
+          <span class="fighter-trait">重装型 · 熔金陨星</span>
+          <span class="pick-label">选择角色</span>
+        </button>
+        <button class="fighter-card rabbit" data-fighter="rabbit" aria-label="选择蒙面兔">
+          <span class="card-number">04</span>
+          <img class="sprite-preview" src="mengmiantu-fight-sprites.png" alt="蒙面兔">
+          <span class="fighter-name">蒙面兔</span>
+          <span class="fighter-trait">幻术型 · 暗月连舞</span>
+          <span class="pick-label">选择角色</span>
+        </button>
       </div>
       <div class="move-legend">
         <span><b>摇杆＋拳</b> 上：超级上勾拳</span>
         <span><b>摇杆＋腿</b> 下：雷霆扫堂腿 · 上：螺旋大跳下劈腿</span>
+        <span><b>能量满＋必</b> 释放角色专属大招</span>
       </div>
     </section>
 
@@ -54,6 +69,7 @@
         <button class="action-button guard" id="guardBtn" aria-label="格挡"><span>挡</span><small>GUARD</small></button>
         <button class="action-button punch" id="punchBtn" aria-label="拳击"><span>拳</span><small>PUNCH</small></button>
         <button class="action-button kick" id="kickBtn" aria-label="踢腿"><span>腿</span><small>KICK</small></button>
+        <button class="action-button super" id="superBtn" aria-label="释放大招"><span>必</span><small>ULT</small></button>
       </div>
     </div>
 
