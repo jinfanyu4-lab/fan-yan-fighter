@@ -34,8 +34,8 @@
   const roster = {
     fan: { name: "大帆帆", color: "#ff4f7b", accent: "#ffd84d", speed: 280, power: 1.08, scale: 1.03, effect: "thunder", ultimate: "雷霆曼巴升龙", ultimatePose: "uppercut" },
     yan: { name: "小颜颜", color: "#59e8ff", accent: "#8d4dff", speed: 320, power: .96, scale: .98, effect: "rotor", ultimate: "旋翼风暴", ultimatePose: "axe" },
-    blob: { name: "黄团团", color: "#ffc93d", accent: "#ff7a26", speed: 245, power: 1.15, scale: 1.04, effect: "goo", ultimate: "熔金陨星", ultimatePose: "axe" },
-    rabbit: { name: "蒙面兔", color: "#ffe458", accent: "#1b102e", speed: 335, power: .94, scale: .97, effect: "moon", ultimate: "暗月连舞", ultimatePose: "kick" }
+    blob: { name: "奶蛙", color: "#ffc93d", accent: "#ff7a26", speed: 245, power: 1.15, scale: 1.04, effect: "goo", ultimate: "熔金陨星", ultimatePose: "axe" },
+    rabbit: { name: "美团鼠", color: "#ffe458", accent: "#1b102e", speed: 335, power: .94, scale: .97, effect: "moon", ultimate: "暗月连舞", ultimatePose: "kick" }
   };
 
   const moves = {
