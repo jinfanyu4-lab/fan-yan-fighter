@@ -52,7 +52,7 @@
   };
 
   let player, enemy, mode = "select", paused = false, last = performance.now();
-  let timer = 60, shake = 0, freeze = 0, announce = null, aiClock = 0, ultimateFX = null, impactFlash = 0;
+  let timer = 60, shake = 0, freeze = 0, slowMotion = 0, announce = null, aiClock = 0, ultimateFX = null, impactFlash = 0;
   const particles = [], hitBursts = [], damageTexts = [];
   const input = { x: 0, y: 0, guard: false, keys: new Set() };
 
@@ -120,17 +120,20 @@
       this.vx = 0; this.vy = 0; this.hp = 100; this.displayHp = 100; this.energy = isPlayer ? 100 : 35;
       this.facing = isPlayer ? 1 : -1; this.action = "idle"; this.actionTime = 0;
       this.hitDone = false; this.guard = false; this.hitFlash = 0; this.hitReact = 0; this.hitReactMax = 0; this.hitDir = 0; this.stun = 0;
-      this.aiX = 0; this.aiGuard = false;
+      this.aiX = 0; this.aiGuard = false; this.guardMeter = 100; this.guardDelay = 0; this.guardAge = 99;
+      this.combo = 0; this.comboTimer = 0; this.comboDamage = 0; this.bufferedAttack = null;
+      this.thunderMarks = 0; this.markTimer = 0; this.armorReady = id === "blob"; this.armorCooldown = 0;
     }
     startAttack(name) {
-      if (this.stun > 0 || this.action !== "idle" || this.guard || mode !== "fight") return;
+      if (this.stun > 0 || this.action !== "idle" || this.guard || mode !== "fight") return false;
       if (name === "ultimate") {
-        if (this.energy < 100) return;
+        if (this.energy < 100) return false;
         this.energy = 0;
         ultimateFX = { owner: this, type: this.effect, life: moves.ultimate.duration, max: moves.ultimate.duration };
       }
       this.action = name; this.actionTime = 0; this.hitDone = false;
       announce = { text: name === "ultimate" ? this.ultimate : moves[name].label, color: name === "ultimate" ? this.accent : moves[name].color, life: name === "ultimate" ? 1.35 : .82, owner: this, big: name === "ultimate" };
+      return true;
     }
   }
 
@@ -140,35 +143,60 @@
     enemy = new Fighter(rivals[Math.floor(Math.random() * rivals.length)], 950, false);
     selectScreen.classList.add("hidden"); resultScreen.classList.add("hidden");
     touchControls.classList.remove("hidden"); pauseBtn.classList.remove("hidden");
-    mode = "countdown"; paused = false; timer = 60; shake = 0; impactFlash = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0; damageTexts.length = 0;
+    mode = "countdown"; paused = false; timer = 60; shake = 0; slowMotion = 0; impactFlash = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0; damageTexts.length = 0;
     superBtn.classList.remove("ready");
     announce = { text: "准备！", color: "#ffd84d", life: 1.05, big: true };
     setTimeout(() => { if (mode === "countdown") { mode = "fight"; announce = { text: "开打！", color: "#ffffff", life: .85, big: true }; } }, 1050);
   }
 
-  function chooseMove(kind, actor = player) {
+  function resolveMove(kind, actor) {
     const ix = actor.isPlayer ? input.x : actor.aiX;
     const iy = actor.isPlayer ? input.y : 0;
     if (kind === "punch") {
-      if (iy < -.46) actor.startAttack("uppercut");
-      else if (iy > .46) actor.startAttack("body");
-      else actor.startAttack("punch");
+      if (iy < -.46) return "uppercut";
+      if (iy > .46) return "body";
+      return "punch";
     } else {
-      if (iy < -.46) actor.startAttack("axe");
-      else if (iy > .46) actor.startAttack("sweep");
-      else if (Math.abs(ix) > .62 && Math.sign(ix) === actor.facing) actor.startAttack("dash");
-      else actor.startAttack("kick");
+      if (iy < -.46) return "axe";
+      if (iy > .46) return "sweep";
+      if (Math.abs(ix) > .62 && Math.sign(ix) === actor.facing) return "dash";
+      return "kick";
     }
+  }
+
+  function chooseMove(kind, actor = player) {
+    if (!actor) return;
+    const name = resolveMove(kind, actor);
+    if (!actor.startAttack(name) && actor.isPlayer && mode === "fight") actor.bufferedAttack = { name, life: .13 };
   }
 
   function updateFighter(f, other, dt) {
     f.hitFlash = Math.max(0, f.hitFlash - dt * 4);
     f.hitReact = Math.max(0, f.hitReact - dt);
+    f.comboTimer = Math.max(0, f.comboTimer - dt);
+    if (f.comboTimer <= 0) { f.combo = 0; f.comboDamage = 0; }
+    f.markTimer = Math.max(0, f.markTimer - dt);
+    if (f.markTimer <= 0) f.thunderMarks = 0;
+    f.guardDelay = Math.max(0, f.guardDelay - dt);
+    if (f.armorCooldown > 0) {
+      f.armorCooldown = Math.max(0, f.armorCooldown - dt);
+      if (f.armorCooldown <= 0 && f.id === "blob") f.armorReady = true;
+    }
+    if (!f.guard && f.guardDelay <= 0) f.guardMeter = Math.min(100, f.guardMeter + dt * 20);
+    if (f.bufferedAttack) {
+      f.bufferedAttack.life -= dt;
+      if (f.bufferedAttack.life <= 0) f.bufferedAttack = null;
+    }
     if (f.displayHp > f.hp) f.displayHp = Math.max(f.hp, f.displayHp - dt * 22);
     f.stun = Math.max(0, f.stun - dt);
     if (mode === "fight" && f.action !== "ultimate") f.energy = Math.min(100, f.energy + dt * 8);
     const moveX = f.isPlayer ? input.x : f.aiX;
-    f.guard = f.stun <= 0 && f.action === "idle" && (f.isPlayer ? input.guard : f.aiGuard);
+    const wantsGuard = f.isPlayer ? input.guard : f.aiGuard;
+    const wasGuarding = f.guard;
+    f.guard = f.stun <= 0 && f.action === "idle" && f.guardMeter > 0 && wantsGuard;
+    if (f.guard && !wasGuarding) f.guardAge = 0;
+    else if (f.guard) f.guardAge += dt;
+    else f.guardAge = 99;
     if (f.action === "idle" && f.stun <= 0 && !f.guard) {
       f.vx += moveX * f.speed * dt * 9;
       if ((f.isPlayer ? input.y : 0) < -.78 && Math.abs(f.vy) < 1 && f.y >= FLOOR - 1) f.vy = -480;
@@ -203,38 +231,77 @@
         const inFront = (other.x - f.x) * f.facing > -20;
         if (Math.abs(other.x - f.x) < m.reach && vertical < 210 && inFront) landHit(f, other, m);
       }
-      if (f.actionTime >= m.duration) { f.action = "idle"; f.actionTime = 0; f.y = Math.min(f.y, FLOOR); }
+      const duration = f.id === "yan" && m.special ? m.duration * .88 : m.duration;
+      const canCancel = f.bufferedAttack && f.actionTime >= duration * .78 && !m.ultimate;
+      if (f.actionTime >= duration || canCancel) {
+        f.action = "idle"; f.actionTime = 0; f.y = Math.min(f.y, FLOOR);
+        if (f.bufferedAttack) { const queued = f.bufferedAttack.name; f.bufferedAttack = null; f.startAttack(queued); }
+      }
     }
+    if (f.action === "idle" && f.bufferedAttack && f.stun <= 0 && !f.guard) { const queued = f.bufferedAttack.name; f.bufferedAttack = null; f.startAttack(queued); }
   }
 
   function landHit(attacker, target, move) {
-    const blocked = target.guard && target.facing === -attacker.facing;
-    const damage = move.damage * attacker.power * (blocked ? .22 : 1);
+    let blocked = target.guard && target.facing === -attacker.facing;
+    const perfect = blocked && target.guardAge <= .14 && (target.isPlayer || Math.random() < .24);
+    let guardBreak = false;
+    if (blocked && !perfect) {
+      target.guardMeter = Math.max(0, target.guardMeter - (move.damage * (move.ultimate ? 3.7 : move.special ? 3.15 : 2.65)));
+      target.guardDelay = 1.15;
+      if (target.guardMeter <= 0) { guardBreak = true; blocked = false; target.guard = false; target.stun = .88; target.guardDelay = 1.65; }
+    }
+    const chainScale = Math.max(.72, 1 - attacker.combo * .055);
+    const passiveScale = attacker.id === "yan" && move.special ? 1.14 : 1;
+    let damage = move.damage * attacker.power * chainScale * passiveScale * (perfect ? 0 : blocked ? .2 : guardBreak ? .58 : 1);
+    let armored = false;
+    if (!blocked && !guardBreak && !move.ultimate && target.id === "blob" && target.armorReady) {
+      armored = true; target.armorReady = false; target.armorCooldown = 9; damage *= .5;
+    }
     target.hp = Math.max(0, target.hp - damage);
     target.hitFlash = 1;
-    target.hitReactMax = blocked ? .18 : move.ultimate ? .62 : move.special ? .42 : .3;
+    target.hitReactMax = perfect ? .12 : blocked ? .18 : armored ? .2 : move.ultimate ? .62 : move.special ? .42 : .3;
     target.hitReact = target.hitReactMax;
     target.hitDir = attacker.facing;
-    target.vx = attacker.facing * move.knock * (blocked ? 2.2 : 4.1);
-    if (!blocked) {
-      target.stun = move.ultimate ? .62 : move.special ? .4 : .22;
-      target.vy = -(move.launch || 34);
+    target.vx = attacker.facing * move.knock * (perfect ? .65 : blocked ? 2.2 : armored ? 1.3 : 4.1);
+    if (perfect) {
+      slowMotion = .24; attacker.stun = Math.max(attacker.stun, .24); target.energy = Math.min(100, target.energy + 18);
+      if (target.id === "rabbit") { attacker.hp = Math.max(0, attacker.hp - 4); attacker.hitFlash = 1; attacker.hitReact = attacker.hitReactMax = .24; attacker.hitDir = -attacker.facing; target.energy = Math.min(100, target.energy + 20); }
+    } else if (!blocked && !armored) {
+      target.stun = Math.max(target.stun, guardBreak ? .88 : move.ultimate ? .62 : move.special ? .4 : .22);
+      target.vy = guardBreak ? -55 : -(move.launch || 34);
       if (target.action !== "ultimate") { target.action = "idle"; target.actionTime = 0; target.hitDone = false; }
+    }
+    if (!blocked && !perfect) {
+      attacker.combo = attacker.comboTimer > 0 ? attacker.combo + 1 : 1;
+      attacker.comboTimer = 1.05; attacker.comboDamage += damage;
+      target.combo = 0; target.comboTimer = 0; target.comboDamage = 0;
     }
     if (!move.ultimate) attacker.energy = Math.min(100, attacker.energy + (blocked ? 10 : move.damage * 2.2));
     target.energy = Math.min(100, target.energy + damage * 1.25);
-    shake = blocked ? 5 : (move.ultimate ? 28 : move.special ? 17 : 10); freeze = blocked ? .025 : move.ultimate ? .12 : .055;
-    impactFlash = Math.max(impactFlash, blocked ? .12 : move.ultimate ? .62 : move.special ? .38 : .24);
+    shake = perfect ? 12 : guardBreak ? 21 : blocked ? 5 : (move.ultimate ? 28 : move.special ? 17 : 10); freeze = perfect ? .035 : guardBreak ? .09 : blocked ? .025 : move.ultimate ? .12 : .055;
+    impactFlash = Math.max(impactFlash, perfect ? .32 : guardBreak ? .48 : blocked ? .12 : move.ultimate ? .62 : move.special ? .38 : .24);
     const strikeY = attacker.action === "sweep" ? attacker.y - 72
       : attacker.action === "uppercut" ? attacker.y - 285
       : attacker.action === "axe" ? attacker.y - 135
       : attacker.action === "kick" || attacker.action === "dash" ? attacker.y - 210
       : attacker.y - 245;
     const strikeX = attacker.x + attacker.facing * Math.min(move.reach * .72, Math.abs(target.x - attacker.x) * .58);
-    burst(strikeX, strikeY, attacker.accent, blocked ? 8 : move.ultimate ? 48 : 18, attacker.effect);
-    damageTexts.push({ x: target.x, y: target.y - 330, value: Math.max(1, Math.round(damage)), blocked, color: blocked ? "#67eeff" : move.ultimate ? "#ffd84d" : "#ffffff", life: .82, max: .82 });
-    announce = { text: blocked ? "格挡！" : move.ultimate ? attacker.ultimate : move.label, color: blocked ? "#59e8ff" : attacker.accent, life: move.ultimate ? 1.05 : .72, owner: attacker };
+    burst(strikeX, strikeY, perfect ? "#ffffff" : attacker.accent, perfect ? 28 : guardBreak ? 34 : blocked ? 8 : move.ultimate ? 48 : 18, attacker.effect);
+    const hitLabel = perfect ? "精准格挡" : guardBreak ? "破防" : armored ? "霸体" : blocked ? "格挡" : "";
+    damageTexts.push({ x: target.x, y: target.y - 330, value: Math.max(0, Math.round(damage)), blocked: blocked || perfect, label: hitLabel, color: perfect ? "#ffffff" : guardBreak ? "#ff365f" : blocked ? "#67eeff" : move.ultimate ? "#ffd84d" : "#ffffff", life: .82, max: .82 });
+    announce = { text: perfect ? "精准格挡！" : guardBreak ? "破防！" : armored ? "熔金霸体！" : blocked ? "格挡！" : move.ultimate ? attacker.ultimate : move.label, color: perfect ? "#ffffff" : guardBreak ? "#ff365f" : blocked ? "#59e8ff" : attacker.accent, life: perfect || guardBreak ? .92 : move.ultimate ? 1.05 : .72, owner: perfect || guardBreak ? target : attacker, big: perfect || guardBreak };
+    if (!blocked && !perfect && attacker.id === "fan") {
+      target.thunderMarks += 1; target.markTimer = 4;
+      if (target.thunderMarks >= 3) {
+        target.thunderMarks = 0; target.hp = Math.max(0, target.hp - 8); target.hitFlash = 1; target.stun = Math.max(target.stun, .34); attacker.energy = Math.min(100, attacker.energy + 18);
+        burst(target.x, target.y - 220, "#ffd84d", 34, "thunder"); shake = Math.max(shake, 18); impactFlash = Math.max(impactFlash, .42);
+        damageTexts.push({ x: target.x, y: target.y - 385, value: 8, blocked: false, label: "雷印爆发", color: "#ffd84d", life: 1, max: 1 });
+        announce = { text: "三重雷印爆发！", color: "#ffd84d", life: 1, owner: attacker, big: true };
+      }
+    }
+    if (perfect && target.id === "rabbit") burst(attacker.x, attacker.y - 220, "#ffe458", 24, "moon");
     if (target.hp <= 0) finish(attacker);
+    else if (attacker.hp <= 0) finish(target);
   }
 
   function updateAI(dt) {
@@ -242,7 +309,7 @@
     if (aiClock > 0 || !enemy || mode !== "fight") return;
     aiClock = .12 + Math.random() * .2;
     const dist = Math.abs(player.x - enemy.x);
-    enemy.aiGuard = player.action !== "idle" && Math.random() < .44;
+    enemy.aiGuard = enemy.guardMeter > 14 && player.action !== "idle" && Math.random() < .44;
     if (enemy.stun > 0 || enemy.action !== "idle") { enemy.aiX = 0; return; }
     if (enemy.energy >= 100 && dist < 410 && !enemy.aiGuard) { enemy.startAttack("ultimate"); return; }
     if (dist > 260) enemy.aiX = Math.sign(player.x - enemy.x);
@@ -371,6 +438,15 @@
       ctx.shadowColor = f.accent; ctx.shadowBlur = 18;
       ctx.beginPath(); ctx.arc(f.x + f.facing * 32, f.y - 235, 112, -1.28, 1.28); ctx.stroke(); ctx.restore();
     }
+    if (f.thunderMarks > 0) {
+      ctx.save(); ctx.translate(f.x, f.y - 440); ctx.shadowColor = "#ffd84d"; ctx.shadowBlur = 16;
+      for (let n = 0; n < f.thunderMarks; n++) { ctx.fillStyle = "#ffd84d"; ctx.beginPath(); ctx.arc((n - 1) * 28, 0, 8, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+    if (f.id === "blob" && f.armorReady) {
+      ctx.save(); ctx.strokeStyle = "rgba(255,201,61,.72)"; ctx.lineWidth = 5; ctx.shadowColor = "#ff7a26"; ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.ellipse(f.x, f.y - 215, 132, 205, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
   }
 
   function drawHUD() {
@@ -380,7 +456,15 @@
     healthBar(W - pad - barW, y, barW, enemy.hp / 100, enemy, true);
     ctx.textAlign = "center"; ctx.font = "1000 42px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(Math.max(0, Math.ceil(timer)).toString().padStart(2, "0"), W / 2, 70);
     ctx.font = "800 13px system-ui"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillText("ROUND 1", W / 2, 91);
+    drawCombo(player, 248, 168, false); drawCombo(enemy, W - 248, 168, true);
     superBtn.classList.toggle("ready", player.energy >= 100 && mode === "fight");
+  }
+
+  function drawCombo(f, x, y, reverse) {
+    if (f.combo < 2 || f.comboTimer <= 0) return;
+    ctx.save(); ctx.textAlign = reverse ? "right" : "left"; ctx.globalAlpha = Math.min(1, f.comboTimer * 2.4);
+    ctx.font = "1000 52px system-ui"; ctx.fillStyle = f.accent; ctx.shadowColor = f.color; ctx.shadowBlur = 20; ctx.fillText(`${f.combo} HIT`, x, y);
+    ctx.font = "900 16px system-ui"; ctx.fillStyle = "white"; ctx.fillText(`${Math.round(f.comboDamage)} DAMAGE · COMBO`, x, y + 25); ctx.restore();
   }
 
   function healthBar(x, y, width, amount, f, reverse) {
@@ -392,9 +476,19 @@
     ctx.fillStyle = "rgba(5,3,12,.82)"; roundRect(x, y + 34, width, 9, 5); ctx.fill();
     const energyW = Math.max(0, width * f.energy / 100); ctx.fillStyle = f.accent;
     roundRect(reverse ? x + width - energyW : x, y + 34, energyW, 9, 5); ctx.fill();
-    ctx.font = "1000 20px system-ui"; ctx.textAlign = reverse ? "right" : "left"; ctx.fillStyle = "white"; ctx.fillText(f.name, reverse ? x + width : x, y + 58);
-    ctx.font = "800 11px system-ui"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillText(f.isPlayer ? "PLAYER" : "CPU", reverse ? x + width : x, y + 77);
+    ctx.fillStyle = "rgba(5,3,12,.82)"; roundRect(x, y + 48, width, 7, 4); ctx.fill();
+    const guardW = Math.max(0, width * f.guardMeter / 100); ctx.fillStyle = f.guardMeter < 28 ? "#ff365f" : "#67eeff";
+    roundRect(reverse ? x + width - guardW : x, y + 48, guardW, 7, 4); ctx.fill();
+    ctx.font = "1000 20px system-ui"; ctx.textAlign = reverse ? "right" : "left"; ctx.fillStyle = "white"; ctx.fillText(f.name, reverse ? x + width : x, y + 75);
+    ctx.font = "800 11px system-ui"; ctx.fillStyle = "rgba(255,255,255,.58)"; ctx.fillText(`${f.isPlayer ? "PLAYER" : "CPU"} · ${passiveStatus(f)}`, reverse ? x + width : x, y + 94);
     ctx.restore();
+  }
+
+  function passiveStatus(f) {
+    if (f.id === "fan") return "雷印引爆";
+    if (f.id === "yan") return "旋翼迅击";
+    if (f.id === "blob") return f.armorReady ? "熔金霸体 READY" : `霸体 ${Math.ceil(f.armorCooldown)}s`;
+    return "暗月反击";
   }
 
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, Math.max(0, w), h, r); }
@@ -454,7 +548,7 @@
       if (d.life <= 0) { damageTexts.splice(i, 1); continue; }
       const k = d.life / d.max; ctx.save(); ctx.globalAlpha = Math.min(1, k * 2.6); ctx.textAlign = "center";
       ctx.font = `1000 ${d.blocked ? 25 : 36}px system-ui`; ctx.fillStyle = d.color; ctx.strokeStyle = "rgba(20,3,14,.9)"; ctx.lineWidth = 8;
-      const text = d.blocked ? `格挡 -${d.value}` : `-${d.value}`; ctx.strokeText(text, d.x, d.y); ctx.fillText(text, d.x, d.y); ctx.restore();
+      const text = d.label ? `${d.label}${d.value ? ` -${d.value}` : ""}` : `-${d.value}`; ctx.strokeText(text, d.x, d.y); ctx.fillText(text, d.x, d.y); ctx.restore();
     }
     if (announce) {
       announce.life -= dt; if (announce.life <= 0) announce = null; else {
@@ -467,6 +561,7 @@
 
   function loop(now) {
     let dt = Math.min(.033, (now - last) / 1000); last = now;
+    if (slowMotion > 0) { slowMotion = Math.max(0, slowMotion - dt); dt *= .24; }
     if (freeze > 0) { freeze -= dt; dt = 0; }
     if (!paused) {
       if (mode === "fight") { timer -= dt; updateAI(dt); updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); if (timer <= 0) finish(player.hp >= enemy.hp ? player : enemy); }
@@ -492,14 +587,18 @@
 
   function tapButton(button, kind) { button.addEventListener("pointerdown", e => { e.preventDefault(); button.classList.add("pressed"); chooseMove(kind); }); ["pointerup","pointercancel","pointerleave"].forEach(n => button.addEventListener(n, () => button.classList.remove("pressed"))); }
   tapButton(punchBtn, "punch"); tapButton(kickBtn, "kick");
-  superBtn.addEventListener("pointerdown", e => { e.preventDefault(); superBtn.classList.add("pressed"); if (player) player.startAttack("ultimate"); });
+  function triggerUltimate() {
+    if (!player) return;
+    if (!player.startAttack("ultimate") && mode === "fight" && player.energy >= 100) player.bufferedAttack = { name: "ultimate", life: .16 };
+  }
+  superBtn.addEventListener("pointerdown", e => { e.preventDefault(); superBtn.classList.add("pressed"); triggerUltimate(); });
   ["pointerup","pointercancel","pointerleave"].forEach(n => superBtn.addEventListener(n, () => superBtn.classList.remove("pressed")));
   guardBtn.addEventListener("pointerdown", e => { e.preventDefault(); input.guard = true; guardBtn.classList.add("pressed"); });
   ["pointerup","pointercancel","pointerleave"].forEach(n => guardBtn.addEventListener(n, () => { input.guard = false; guardBtn.classList.remove("pressed"); }));
 
   document.addEventListener("keydown", e => {
     input.keys.add(e.code); if (["ArrowLeft","KeyA"].includes(e.code)) input.x = -1; if (["ArrowRight","KeyD"].includes(e.code)) input.x = 1; if (["ArrowUp","KeyW"].includes(e.code)) input.y = -1; if (["ArrowDown","KeyS"].includes(e.code)) input.y = 1;
-    if (e.code === "KeyJ") chooseMove("punch"); if (e.code === "KeyK") chooseMove("kick"); if (e.code === "KeyL") input.guard = true; if (e.code === "KeyU" && player) player.startAttack("ultimate");
+    if (e.code === "KeyJ") chooseMove("punch"); if (e.code === "KeyK") chooseMove("kick"); if (e.code === "KeyL") input.guard = true; if (e.code === "KeyU") triggerUltimate();
   });
   document.addEventListener("keyup", e => { input.keys.delete(e.code); if (![...input.keys].some(k => ["ArrowLeft","KeyA","ArrowRight","KeyD"].includes(k))) input.x = 0; if (![...input.keys].some(k => ["ArrowUp","KeyW","ArrowDown","KeyS"].includes(k))) input.y = 0; if (e.code === "KeyL") input.guard = false; });
   document.querySelectorAll("[data-fighter]").forEach(b => b.addEventListener("click", () => startGame(b.dataset.fighter)));
