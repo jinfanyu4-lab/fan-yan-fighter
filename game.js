@@ -18,6 +18,8 @@
 
   const W = 1280, H = 720, FLOOR = 610;
   const images = { fan: new Image(), yan: new Image(), blob: new Image(), rabbit: new Image() };
+  const spriteCache = {};
+  let backgroundCache = null;
   images.fan.src = "dafanfan-fight-sprites.png";
   images.yan.src = "xiaoyanyan-fight-sprites.png";
   images.blob.src = "huangtuantuan-fight-sprites.png";
@@ -53,6 +55,63 @@
   let timer = 60, shake = 0, freeze = 0, announce = null, aiClock = 0, ultimateFX = null, impactFlash = 0;
   const particles = [], hitBursts = [], damageTexts = [];
   const input = { x: 0, y: 0, guard: false, keys: new Set() };
+
+  function buildSpriteCache(id) {
+    const img = images[id];
+    if (!img || !img.complete || !img.naturalWidth || !roster[id]) return;
+    const cellW = img.naturalWidth / 4, cellH = img.naturalHeight / 2;
+    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465 }[id] || 470) * roster[id].scale;
+    const width = height * (cellW / cellH), pad = 42;
+    const frames = [];
+    for (let frame = 0; frame < 8; frame++) {
+      const layer = document.createElement("canvas");
+      layer.width = Math.ceil(width + pad * 2); layer.height = Math.ceil(height + pad * 2);
+      const layerCtx = layer.getContext("2d", { alpha: true });
+      const col = frame % 4, row = Math.floor(frame / 4);
+      layerCtx.save(); layerCtx.globalAlpha = .42;
+      layerCtx.filter = `blur(9px) drop-shadow(0 0 18px ${roster[id].color})`;
+      layerCtx.drawImage(img, col * cellW, row * cellH, cellW, cellH, pad + 4, pad + 7, width, height);
+      layerCtx.restore();
+      layerCtx.filter = "drop-shadow(0 15px 11px rgba(0,0,0,.5))";
+      layerCtx.drawImage(img, col * cellW, row * cellH, cellW, cellH, pad, pad, width, height);
+      layerCtx.filter = "none";
+      frames.push(layer);
+    }
+    spriteCache[id] = { frames, width, height, pad, filtered: new Map() };
+    images[id] = null;
+  }
+
+  function filteredFrame(cache, frame, key, filter) {
+    const cacheKey = `${frame}:${key}`;
+    if (cache.filtered.has(cacheKey)) return cache.filtered.get(cacheKey);
+    const source = cache.frames[frame], layer = document.createElement("canvas");
+    layer.width = source.width; layer.height = source.height;
+    const layerCtx = layer.getContext("2d", { alpha: true });
+    layerCtx.filter = filter; layerCtx.drawImage(source, 0, 0); layerCtx.filter = "none";
+    cache.filtered.set(cacheKey, layer);
+    return layer;
+  }
+
+  Object.entries(images).forEach(([id, img]) => {
+    img.addEventListener("load", () => buildSpriteCache(id), { once: true });
+    if (img.complete && img.naturalWidth) buildSpriteCache(id);
+  });
+
+  function buildBackgroundCache() {
+    const base = document.createElement("canvas"), front = document.createElement("canvas");
+    base.width = front.width = W; base.height = front.height = H;
+    const b = base.getContext("2d"), f = front.getContext("2d");
+    const g = b.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#160c32"); g.addColorStop(.56, "#492068"); g.addColorStop(1, "#0a0712");
+    b.fillStyle = g; b.fillRect(0, 0, W, H);
+    b.fillStyle = "rgba(255,255,255,.045)"; for (let i = 0; i < 22; i++) b.fillRect((i * 71 + 30) % W, 58 + (i * 83) % 330, 3, 3);
+    f.strokeStyle = "rgba(255,216,77,.14)"; f.lineWidth = 2;
+    for (let y = 335; y < FLOOR; y += 48) { f.beginPath(); f.moveTo(0, y); f.lineTo(W, y); f.stroke(); }
+    for (let x = -100; x < W + 100; x += 120) { f.beginPath(); f.moveTo(W / 2, 300); f.lineTo(x, FLOOR); f.stroke(); }
+    f.fillStyle = "#0b0713"; f.fillRect(0, FLOOR, W, H - FLOOR);
+    const floorG = f.createLinearGradient(0, FLOOR, 0, H); floorG.addColorStop(0, "rgba(141,77,255,.35)"); floorG.addColorStop(1, "rgba(0,0,0,0)"); f.fillStyle = floorG; f.fillRect(0, FLOOR, W, H - FLOOR);
+    f.fillStyle = "rgba(255,216,77,.82)"; f.fillRect(0, FLOOR - 8, W, 4);
+    backgroundCache = { base, front };
+  }
 
   class Fighter {
     constructor(id, x, isPlayer) {
@@ -210,32 +269,25 @@
   }
 
   function drawBackground(t) {
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#160c32"); g.addColorStop(.56, "#492068"); g.addColorStop(1, "#0a0712");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (!backgroundCache) buildBackgroundCache();
+    ctx.drawImage(backgroundCache.base, 0, 0);
     ctx.save(); ctx.globalAlpha = .22;
     for (let i = 0; i < 9; i++) { const x = (i * 173 + t * 10) % (W + 180) - 90; const h = 120 + (i % 4) * 55; ctx.fillStyle = i % 2 ? "#7147a6" : "#352050"; ctx.fillRect(x, FLOOR - h, 125, h); }
     ctx.restore();
-    ctx.strokeStyle = "rgba(255,216,77,.14)"; ctx.lineWidth = 2;
-    for (let y = 335; y < FLOOR; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-    for (let x = -100; x < W + 100; x += 120) { ctx.beginPath(); ctx.moveTo(W / 2, 300); ctx.lineTo(x, FLOOR); ctx.stroke(); }
-    ctx.fillStyle = "#0b0713"; ctx.fillRect(0, FLOOR, W, H - FLOOR);
-    const floorG = ctx.createLinearGradient(0, FLOOR, 0, H); floorG.addColorStop(0, "rgba(141,77,255,.35)"); floorG.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = floorG; ctx.fillRect(0, FLOOR, W, H - FLOOR);
-    ctx.fillStyle = "rgba(255,255,255,.045)"; for (let i = 0; i < 22; i++) ctx.fillRect((i * 71 + 30) % W, 58 + (i * 83) % 330, 3, 3);
-    ctx.fillStyle = "rgba(255,216,77,.82)"; ctx.fillRect(0, FLOOR - 8, W, 4);
+    ctx.drawImage(backgroundCache.front, 0, 0);
   }
 
   function drawFighter(f, t) {
-    const img = images[f.id];
-    if (!img.complete || !img.naturalWidth) return;
+    const source = images[f.id];
+    if (!spriteCache[f.id] && source && source.complete && source.naturalWidth) buildSpriteCache(f.id);
+    const cached = spriteCache[f.id];
+    if (!cached) return;
 
     let pose = f.guard ? "guard" : f.action === "ultimate" ? f.ultimatePose : f.action;
     if (f.hitReact > 0 && !f.guard) pose = "idle";
     if (pose === "idle" && (Math.abs(f.vx) > 22 || Math.abs(f.isPlayer ? input.x : f.aiX) > .2)) pose = "walk";
     const frame = poseFrame[pose] ?? 0;
-    const col = frame % 4, row = Math.floor(frame / 4);
-    const cellW = img.naturalWidth / 4, cellH = img.naturalHeight / 2;
-    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465 }[f.id] || 470) * f.scale;
-    const width = height * (cellW / cellH);
+    const frameCanvas = cached.frames[frame], height = cached.height, width = cached.width, pad = cached.pad;
 
     let p = 0, snap = 0, dx = 0, dy = 0, angle = 0, sx = 1, sy = 1;
     if (f.action !== "idle") {
@@ -282,24 +334,16 @@
     ctx.scale(f.facing * sx, sy);
     ctx.rotate(angle);
 
-    // A dark offset pass plus a colored rim gives the transparent 3D render
-    // depth against the arena without changing the character artwork.
-    ctx.save();
-    ctx.globalAlpha = .42;
-    ctx.filter = `blur(9px) drop-shadow(0 0 18px ${f.color})`;
-    ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 + f.facing * 4, -height + 7, width, height);
-    ctx.restore();
-
-    if (f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0) ctx.filter = "brightness(2.6) saturate(.25) contrast(1.25)";
-    else ctx.filter = "drop-shadow(0 15px 11px rgba(0,0,0,.5))";
-    ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2, -height, width, height);
+    const flashing = f.hitFlash > 0 && Math.floor(f.hitFlash * 14) % 2 === 0;
+    const mainFrame = flashing ? filteredFrame(cached, frame, "flash", "brightness(2.6) saturate(.25) contrast(1.25)") : frameCanvas;
+    ctx.drawImage(mainFrame, -width / 2 - pad, -height - pad, mainFrame.width, mainFrame.height);
 
     if (f.hitReact > 0) {
       const hitAlpha = Math.min(.58, f.hitReact / Math.max(.001, f.hitReactMax));
       ctx.globalCompositeOperation = "screen";
       ctx.globalAlpha = hitAlpha;
-      ctx.filter = "sepia(1) saturate(10) hue-rotate(320deg) brightness(1.8)";
-      ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2, -height, width, height);
+      const redFrame = filteredFrame(cached, frame, "hurt", "sepia(1) saturate(10) hue-rotate(320deg) brightness(1.8)");
+      ctx.drawImage(redFrame, -width / 2 - pad, -height - pad, redFrame.width, redFrame.height);
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
     }
@@ -307,8 +351,9 @@
     if (f.action !== "idle" && snap > .45) {
       ctx.globalCompositeOperation = "screen";
       ctx.globalAlpha = .13 * snap;
-      ctx.filter = `blur(3px) drop-shadow(0 0 12px ${f.action === "ultimate" ? f.accent : moves[f.action].color})`;
-      ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, -width / 2 - f.facing * 20, -height, width, height);
+      const trailColor = f.action === "ultimate" ? f.accent : moves[f.action].color;
+      const trailFrame = filteredFrame(cached, frame, `trail:${trailColor}`, `blur(3px) drop-shadow(0 0 12px ${trailColor})`);
+      ctx.drawImage(trailFrame, -width / 2 - pad - f.facing * 20, -height - pad, trailFrame.width, trailFrame.height);
     }
     ctx.restore(); ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
 
