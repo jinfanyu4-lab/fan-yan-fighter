@@ -18,12 +18,18 @@
 
   const W = 1280, H = 720, FLOOR = 610;
   const images = { fan: new Image(), yan: new Image(), blob: new Image(), rabbit: new Image() };
+  const knockdownImages = { fan: new Image(), yan: new Image(), blob: new Image(), rabbit: new Image() };
   const spriteCache = {};
+  const knockdownCache = {};
   let backgroundCache = null;
   images.fan.src = "dafanfan-fight-sprites.png";
   images.yan.src = "xiaoyanyan-fight-sprites.png";
   images.blob.src = "huangtuantuan-fight-sprites.png";
   images.rabbit.src = "mengmiantu-fight-sprites.png";
+  knockdownImages.fan.src = "dafanfan-knockdown-sprites.png";
+  knockdownImages.yan.src = "xiaoyanyan-knockdown-sprites.png";
+  knockdownImages.blob.src = "huangtuantuan-knockdown-sprites.png";
+  knockdownImages.rabbit.src = "mengmiantu-knockdown-sprites.png";
 
   // Each 3D-rendered sheet is a 4x2 grid: idle, walk, punch, kick,
   // uppercut, sweep, airborne axe kick and guard. Keeping the fighter
@@ -41,14 +47,14 @@
   };
 
   const moves = {
-    punch: { label: "疾风拳", duration: .42, hitAt: .19, reach: 155, damage: 7, knock: 34, color: "#fff4b0" },
-    body: { label: "碎甲重拳", duration: .55, hitAt: .29, reach: 138, damage: 10, knock: 24, color: "#ff9a5c" },
-    uppercut: { label: "超级上勾拳", duration: .78, hitAt: .37, reach: 142, damage: 15, knock: 58, launch: 170, color: "#ffd84d", special: true },
-    kick: { label: "旋身踢", duration: .55, hitAt: .28, reach: 185, damage: 10, knock: 46, color: "#67eeff" },
-    sweep: { label: "雷霆扫堂腿", duration: .82, hitAt: .46, reach: 205, damage: 14, knock: 72, color: "#8d6cff", special: true },
-    axe: { label: "螺旋大跳下劈腿", duration: 1.08, hitAt: .67, reach: 178, damage: 18, knock: 84, launch: 105, color: "#ff4fca", special: true },
-    dash: { label: "流星飞踢", duration: .76, hitAt: .39, reach: 235, damage: 13, knock: 82, color: "#59e8ff", special: true },
-    ultimate: { label: "大招", duration: 1.58, hitAt: .86, reach: 410, damage: 32, knock: 125, launch: 180, color: "#ffd84d", special: true, ultimate: true }
+    punch: { label: "疾风拳", duration: .42, hitAt: .19, reach: 205, damage: 7, knock: 34, color: "#fff4b0", hitbox: { x: 105, y: -245, w: 105, h: 145 } },
+    body: { label: "碎甲重拳", duration: .55, hitAt: .29, reach: 205, damage: 10, knock: 24, color: "#ff9a5c", hitbox: { x: 95, y: -175, w: 112, h: 150 } },
+    uppercut: { label: "超级上勾拳", duration: .78, hitAt: .37, reach: 220, damage: 15, knock: 58, launch: 170, color: "#ffd84d", special: true, hitbox: { x: 105, y: -235, w: 120, h: 245 } },
+    kick: { label: "旋身踢", duration: .55, hitAt: .28, reach: 285, damage: 10, knock: 46, color: "#67eeff", hitbox: { x: 155, y: -225, w: 150, h: 145 } },
+    sweep: { label: "雷霆扫堂腿", duration: .82, hitAt: .46, reach: 315, damage: 14, knock: 72, color: "#8d6cff", special: true, hitbox: { x: 165, y: -78, w: 190, h: 92 } },
+    axe: { label: "螺旋大跳下劈腿", duration: 1.08, hitAt: .67, reach: 265, damage: 18, knock: 84, launch: 105, color: "#ff4fca", special: true, hitbox: { x: 130, y: -210, w: 165, h: 260 } },
+    dash: { label: "流星飞踢", duration: .76, hitAt: .39, reach: 340, damage: 13, knock: 82, color: "#59e8ff", special: true, hitbox: { x: 195, y: -215, w: 180, h: 155 } },
+    ultimate: { label: "大招", duration: 1.58, hitAt: .86, reach: 500, damage: 32, knock: 125, launch: 180, color: "#ffd84d", special: true, ultimate: true, hitbox: { x: 230, y: -220, w: 430, h: 310 } }
   };
 
   let player, enemy, mode = "select", paused = false, last = performance.now();
@@ -97,6 +103,32 @@
     if (img.complete && img.naturalWidth) buildSpriteCache(id);
   });
 
+  function buildKnockdownCache(id) {
+    const img = knockdownImages[id];
+    if (!img || !img.complete || !img.naturalWidth || !roster[id]) return;
+    const cellW = img.naturalWidth / 3, cellH = img.naturalHeight;
+    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465 }[id] || 470) * roster[id].scale;
+    const width = height * (cellW / cellH), pad = 42, frames = [];
+    for (let frame = 0; frame < 3; frame++) {
+      const layer = document.createElement("canvas");
+      layer.width = Math.ceil(width + pad * 2); layer.height = Math.ceil(height + pad * 2);
+      const layerCtx = layer.getContext("2d", { alpha: true });
+      layerCtx.save(); layerCtx.globalAlpha = .42;
+      layerCtx.filter = `blur(9px) drop-shadow(0 0 18px ${roster[id].color})`;
+      layerCtx.drawImage(img, frame * cellW, 0, cellW, cellH, pad + 4, pad + 7, width, height);
+      layerCtx.restore(); layerCtx.filter = "drop-shadow(0 15px 11px rgba(0,0,0,.5))";
+      layerCtx.drawImage(img, frame * cellW, 0, cellW, cellH, pad, pad, width, height);
+      layerCtx.filter = "none"; frames.push(layer);
+    }
+    knockdownCache[id] = { frames, width, height, pad, filtered: new Map() };
+    knockdownImages[id] = null;
+  }
+
+  Object.entries(knockdownImages).forEach(([id, img]) => {
+    img.addEventListener("load", () => buildKnockdownCache(id), { once: true });
+    if (img.complete && img.naturalWidth) buildKnockdownCache(id);
+  });
+
   function buildBackgroundCache() {
     const base = document.createElement("canvas"), front = document.createElement("canvas");
     base.width = front.width = W; base.height = front.height = H;
@@ -123,6 +155,7 @@
       this.aiX = 0; this.aiGuard = false; this.guardMeter = 100; this.guardDelay = 0; this.guardAge = 99;
       this.combo = 0; this.comboTimer = 0; this.comboDamage = 0; this.bufferedAttack = null;
       this.thunderMarks = 0; this.markTimer = 0; this.armorReady = id === "blob"; this.armorCooldown = 0;
+      this.knockdown = null; this.knockTimer = 0; this.invulnerable = 0;
     }
     startAttack(name) {
       if (this.stun > 0 || this.action !== "idle" || this.guard || mode !== "fight") return false;
@@ -170,9 +203,28 @@
     if (!actor.startAttack(name) && actor.isPlayer && mode === "fight") actor.bufferedAttack = { name, life: .13 };
   }
 
+  function beginKnockdown(f, direction, force = false) {
+    if (f.knockdown && !force) return;
+    f.knockdown = "fall"; f.knockTimer = 0; f.guard = false; f.action = "idle"; f.actionTime = 0; f.hitDone = false;
+    f.stun = Math.max(f.stun, .45); f.vx = direction * Math.max(250, Math.abs(f.vx)); f.vy = Math.min(f.vy, -185);
+  }
+
+  function moveConnects(attacker, target, move) {
+    if (target.invulnerable > 0 || target.knockdown) return false;
+    const box = move.hitbox;
+    const localX = (target.x - attacker.x) * attacker.facing;
+    const attackLeft = box.x - box.w / 2, attackRight = box.x + box.w / 2;
+    const targetRadius = target.id === "fan" ? 54 : target.id === "yan" ? 66 : 62;
+    if (localX + targetRadius < attackLeft || localX - targetRadius > attackRight) return false;
+    const attackTop = attacker.y + box.y - box.h / 2, attackBottom = attacker.y + box.y + box.h / 2;
+    const targetTop = target.y - (target.id === "fan" ? 420 : 390), targetBottom = target.y - 24;
+    return attackBottom >= targetTop && attackTop <= targetBottom;
+  }
+
   function updateFighter(f, other, dt) {
     f.hitFlash = Math.max(0, f.hitFlash - dt * 4);
     f.hitReact = Math.max(0, f.hitReact - dt);
+    f.invulnerable = Math.max(0, f.invulnerable - dt);
     f.comboTimer = Math.max(0, f.comboTimer - dt);
     if (f.comboTimer <= 0) { f.combo = 0; f.comboDamage = 0; }
     f.markTimer = Math.max(0, f.markTimer - dt);
@@ -191,6 +243,19 @@
     f.stun = Math.max(0, f.stun - dt);
     if (mode === "fight" && f.action !== "ultimate") f.energy = Math.min(100, f.energy + dt * 8);
     const moveX = f.isPlayer ? input.x : f.aiX;
+    if (f.knockdown) {
+      f.guard = false; f.action = "idle"; f.bufferedAttack = null;
+      if (f.knockdown === "fall") {
+        f.vx *= Math.pow(.018, dt); f.vy += 1150 * dt; f.x += f.vx * dt; f.y += f.vy * dt;
+        f.x = Math.max(260, Math.min(W - 260, f.x));
+        if (f.y >= FLOOR) { f.y = FLOOR; f.vy = 0; f.vx = 0; f.knockdown = "down"; f.knockTimer = .68; f.invulnerable = 1.35; shake = Math.max(shake, 9); }
+      } else {
+        f.y = FLOOR; f.vx = 0; f.vy = 0; f.knockTimer -= dt;
+        if (f.knockdown === "down" && f.knockTimer <= 0) { f.knockdown = "getup"; f.knockTimer = .62; }
+        else if (f.knockdown === "getup" && f.knockTimer <= 0) { f.knockdown = null; f.stun = 0; f.invulnerable = .24; }
+      }
+      return;
+    }
     const wantsGuard = f.isPlayer ? input.guard : f.aiGuard;
     const wasGuarding = f.guard;
     f.guard = f.stun <= 0 && f.action === "idle" && f.guardMeter > 0 && wantsGuard;
@@ -227,9 +292,7 @@
       }
       if (!f.hitDone && f.actionTime >= m.hitAt) {
         f.hitDone = true;
-        const vertical = Math.abs((f.y - 110) - (other.y - 110));
-        const inFront = (other.x - f.x) * f.facing > -20;
-        if (Math.abs(other.x - f.x) < m.reach && vertical < 210 && inFront) landHit(f, other, m);
+        if (moveConnects(f, other, m)) landHit(f, other, m);
       }
       const duration = f.id === "yan" && m.special ? m.duration * .88 : m.duration;
       const canCancel = f.bufferedAttack && f.actionTime >= duration * .78 && !m.ultimate;
@@ -270,6 +333,7 @@
       target.stun = Math.max(target.stun, guardBreak ? .88 : move.ultimate ? .62 : move.special ? .4 : .22);
       target.vy = guardBreak ? -55 : -(move.launch || 34);
       if (target.action !== "ultimate") { target.action = "idle"; target.actionTime = 0; target.hitDone = false; }
+      if (guardBreak || move.ultimate || (move.launch || 0) >= 100) beginKnockdown(target, attacker.facing);
     }
     if (!blocked && !perfect) {
       attacker.combo = attacker.comboTimer > 0 ? attacker.combo + 1 : 1;
@@ -285,7 +349,7 @@
       : attacker.action === "axe" ? attacker.y - 135
       : attacker.action === "kick" || attacker.action === "dash" ? attacker.y - 210
       : attacker.y - 245;
-    const strikeX = attacker.x + attacker.facing * Math.min(move.reach * .72, Math.abs(target.x - attacker.x) * .58);
+    const strikeX = attacker.x + attacker.facing * Math.min(move.hitbox.x + move.hitbox.w * .28, Math.abs(target.x - attacker.x) * .72);
     burst(strikeX, strikeY, perfect ? "#ffffff" : attacker.accent, perfect ? 28 : guardBreak ? 34 : blocked ? 8 : move.ultimate ? 48 : 18, attacker.effect);
     const hitLabel = perfect ? "精准格挡" : guardBreak ? "破防" : armored ? "霸体" : blocked ? "格挡" : "";
     damageTexts.push({ x: target.x, y: target.y - 330, value: Math.max(0, Math.round(damage)), blocked: blocked || perfect, label: hitLabel, color: perfect ? "#ffffff" : guardBreak ? "#ff365f" : blocked ? "#67eeff" : move.ultimate ? "#ffd84d" : "#ffffff", life: .82, max: .82 });
@@ -300,8 +364,8 @@
       }
     }
     if (perfect && target.id === "rabbit") burst(attacker.x, attacker.y - 220, "#ffe458", 24, "moon");
-    if (target.hp <= 0) finish(attacker);
-    else if (attacker.hp <= 0) finish(target);
+    if (target.hp <= 0) { beginKnockdown(target, attacker.facing, true); finish(attacker, target); }
+    else if (attacker.hp <= 0) { beginKnockdown(attacker, -attacker.facing, true); finish(target, attacker); }
   }
 
   function updateAI(dt) {
@@ -326,13 +390,17 @@
     for (let i = 0; i < count; i++) particles.push({ x, y, vx: (Math.random() - .5) * 560, vy: (Math.random() - .72) * 470, life: .38 + Math.random() * .42, color, kind, size: 3 + Math.random() * 9, spin: Math.random() * Math.PI * 2 });
   }
 
-  function finish(winner) {
-    mode = "over"; input.guard = false; touchControls.classList.add("hidden"); pauseBtn.classList.add("hidden");
+  function finish(winner, loser = null) {
+    if (mode === "finishing" || mode === "over") return;
+    mode = "finishing"; input.guard = false; touchControls.classList.add("hidden"); pauseBtn.classList.add("hidden");
+    if (loser && !loser.knockdown) beginKnockdown(loser, winner.facing, true);
+    announce = { text: "K.O.", color: "#ffd84d", life: 1.25, big: true };
     setTimeout(() => {
+      mode = "over";
       resultTitle.textContent = `${winner.name}胜利`;
       resultDetail.textContent = winner.isPlayer ? "这套连招，漂亮！" : "电脑拿下一局，再战一次吧。";
       resultScreen.classList.remove("hidden");
-    }, 650);
+    }, 1450);
   }
 
   function drawBackground(t) {
@@ -345,19 +413,20 @@
   }
 
   function drawFighter(f, t) {
-    const source = images[f.id];
+    const source = images[f.id], downSource = knockdownImages[f.id];
     if (!spriteCache[f.id] && source && source.complete && source.naturalWidth) buildSpriteCache(f.id);
-    const cached = spriteCache[f.id];
+    if (!knockdownCache[f.id] && downSource && downSource.complete && downSource.naturalWidth) buildKnockdownCache(f.id);
+    const isDown = Boolean(f.knockdown), cached = isDown ? knockdownCache[f.id] : spriteCache[f.id];
     if (!cached) return;
 
     let pose = f.guard ? "guard" : f.action === "ultimate" ? f.ultimatePose : f.action;
     if (f.hitReact > 0 && !f.guard) pose = "idle";
     if (pose === "idle" && (Math.abs(f.vx) > 22 || Math.abs(f.isPlayer ? input.x : f.aiX) > .2)) pose = "walk";
-    const frame = poseFrame[pose] ?? 0;
+    const frame = isDown ? (f.knockdown === "fall" ? 0 : f.knockdown === "down" ? 1 : 2) : (poseFrame[pose] ?? 0);
     const frameCanvas = cached.frames[frame], height = cached.height, width = cached.width, pad = cached.pad;
 
     let p = 0, snap = 0, dx = 0, dy = 0, angle = 0, sx = 1, sy = 1;
-    if (f.action !== "idle") {
+    if (!isDown && f.action !== "idle") {
       const m = moves[f.action];
       p = Math.min(1, f.actionTime / m.duration);
       snap = Math.sin(p * Math.PI);
@@ -373,12 +442,12 @@
         if (f.effect === "goo") { sx = 1 + .13 * snap; sy = 1 - .09 * snap; }
         if (f.effect === "moon") { dx = f.facing * 34 * snap; angle = f.facing * -.16 * snap; }
       }
-    } else {
+    } else if (!isDown) {
       dy = Math.sin(t * 4.8 + (f.isPlayer ? 0 : 2.4)) * 3;
       if (pose === "walk") dx = Math.sin(t * 11) * 4;
     }
 
-    if (f.hitReact > 0) {
+    if (f.hitReact > 0 && !isDown) {
       const hitP = 1 - f.hitReact / Math.max(.001, f.hitReactMax);
       const recoil = Math.sin(hitP * Math.PI);
       dx += f.hitDir * 34 * recoil;
@@ -415,7 +484,7 @@
       ctx.globalAlpha = 1;
     }
 
-    if (f.action !== "idle" && snap > .45) {
+    if (!isDown && f.action !== "idle" && snap > .45) {
       ctx.globalCompositeOperation = "screen";
       ctx.globalAlpha = .13 * snap;
       const trailColor = f.action === "ultimate" ? f.accent : moves[f.action].color;
@@ -424,7 +493,7 @@
     }
     ctx.restore(); ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
 
-    if (f.hitReact > 0) {
+    if (f.hitReact > 0 && !isDown) {
       const k = f.hitReact / Math.max(.001, f.hitReactMax);
       ctx.save(); ctx.translate(f.x, f.y - 225); ctx.globalAlpha = k * .7;
       ctx.strokeStyle = "#ff365f"; ctx.lineWidth = 8 * k; ctx.shadowColor = "#ff365f"; ctx.shadowBlur = 24;
@@ -433,7 +502,7 @@
       ctx.restore();
     }
 
-    if (f.guard) {
+    if (!isDown && f.guard) {
       ctx.save(); ctx.strokeStyle = f.accent; ctx.globalAlpha = .86; ctx.lineWidth = 8;
       ctx.shadowColor = f.accent; ctx.shadowBlur = 18;
       ctx.beginPath(); ctx.arc(f.x + f.facing * 32, f.y - 235, 112, -1.28, 1.28); ctx.stroke(); ctx.restore();
@@ -564,7 +633,8 @@
     if (slowMotion > 0) { slowMotion = Math.max(0, slowMotion - dt); dt *= .24; }
     if (freeze > 0) { freeze -= dt; dt = 0; }
     if (!paused) {
-      if (mode === "fight") { timer -= dt; updateAI(dt); updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); if (timer <= 0) finish(player.hp >= enemy.hp ? player : enemy); }
+      if (mode === "fight") { timer -= dt; updateAI(dt); updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); if (timer <= 0) { const winner = player.hp >= enemy.hp ? player : enemy; finish(winner, winner === player ? enemy : player); } }
+      else if (mode === "finishing" && player) { updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); }
       else if (mode === "countdown" && player) { updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); }
     } else dt = 0;
     ctx.save(); if (shake > .2) { ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake); shake *= .82; }
