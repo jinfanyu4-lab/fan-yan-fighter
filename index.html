@@ -18,6 +18,21 @@
         <p class="eyebrow">MOBILE ARCADE · 单人对战</p>
         <h1 id="gameTitle">雷霆曼巴格斗场</h1>
         <p class="select-tip">选择你的角色，另一位将由电脑控制</p>
+        <div class="game-options" aria-label="对战设置">
+          <label>模式
+            <select id="modeSelect" aria-label="模式">
+              <option value="versus">三局两胜</option>
+              <option value="training">训练模式</option>
+            </select>
+          </label>
+          <label>难度
+            <select id="difficultySelect" aria-label="难度">
+              <option value="casual">休闲</option>
+              <option value="standard" selected>标准</option>
+              <option value="mamba">曼巴</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div class="fighter-cards">
         <button class="fighter-card fan" data-fighter="fan" aria-label="选择大帆帆">
@@ -37,14 +52,14 @@
         </button>
         <button class="fighter-card blob" data-fighter="blob" aria-label="选择奶蛙">
           <span class="card-number">03</span>
-          <img class="sprite-preview" src="huangtuantuan-fight-sprites.png" alt="奶蛙">
+          <img src="huangtuantuan.jpg" alt="奶蛙">
           <span class="fighter-name">奶蛙</span>
           <span class="fighter-trait">重装型 · 熔金霸体护甲</span>
           <span class="pick-label">选择角色</span>
         </button>
         <button class="fighter-card rabbit" data-fighter="rabbit" aria-label="选择美团鼠">
           <span class="card-number">04</span>
-          <img class="sprite-preview" src="mengmiantu-fight-sprites.png" alt="美团鼠">
+          <img src="mengmiantu.jpg" alt="美团鼠">
           <span class="fighter-name">美团鼠</span>
           <span class="fighter-trait">反击型 · 精准格挡幻影反击</span>
           <span class="pick-label">选择角色</span>
@@ -75,11 +90,19 @@
     </div>
 
     <button class="pause-button hidden" id="pauseBtn" aria-label="暂停游戏">Ⅱ</button>
+    <button class="exit-button hidden" id="exitBtn" aria-label="返回角色选择">↩</button>
+
+    <section class="loading-screen hidden" id="loadingScreen" aria-live="polite">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <strong>角色入场中</strong>
+      <span id="loadingDetail">正在准备立体动作与特效…</span>
+    </section>
 
     <section class="result-screen hidden" id="resultScreen" aria-live="polite">
       <p class="result-kicker" id="resultKicker">K.O.</p>
       <h2 id="resultTitle">大帆帆胜利</h2>
       <p id="resultDetail">漂亮的一击！</p>
+      <div class="result-stats" id="resultStats"></div>
       <div class="result-actions">
         <button id="rematchBtn">再来一局</button>
         <button class="secondary" id="changeBtn">重选角色</button>

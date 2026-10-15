@@ -8,7 +8,12 @@
   const resultScreen = document.getElementById("resultScreen");
   const resultTitle = document.getElementById("resultTitle");
   const resultDetail = document.getElementById("resultDetail");
+  const resultStats = document.getElementById("resultStats");
   const pauseBtn = document.getElementById("pauseBtn");
+  const exitBtn = document.getElementById("exitBtn");
+  const loadingScreen = document.getElementById("loadingScreen");
+  const modeSelect = document.getElementById("modeSelect");
+  const difficultySelect = document.getElementById("difficultySelect");
   const joystick = document.getElementById("joystick");
   const stick = document.getElementById("stick");
   const punchBtn = document.getElementById("punchBtn");
@@ -17,19 +22,17 @@
   const superBtn = document.getElementById("superBtn");
 
   const W = 1280, H = 720, FLOOR = 610;
-  const images = { fan: new Image(), yan: new Image(), blob: new Image(), rabbit: new Image() };
-  const knockdownImages = { fan: new Image(), yan: new Image(), blob: new Image(), rabbit: new Image() };
+  const STEP = 1 / 60;
+  const images = {}, knockdownImages = {}, assetPromises = {};
+  const assetSources = {
+    fan: ["dafanfan-fight-sprites.png", "dafanfan-knockdown-sprites.png"],
+    yan: ["xiaoyanyan-fight-sprites.png", "xiaoyanyan-knockdown-sprites.png"],
+    blob: ["huangtuantuan-fight-sprites.png", "huangtuantuan-knockdown-sprites.png"],
+    rabbit: ["mengmiantu-fight-sprites.png", "mengmiantu-knockdown-sprites.png"]
+  };
   const spriteCache = {};
   const knockdownCache = {};
   let backgroundCache = null;
-  images.fan.src = "dafanfan-fight-sprites.png";
-  images.yan.src = "xiaoyanyan-fight-sprites.png";
-  images.blob.src = "huangtuantuan-fight-sprites.png";
-  images.rabbit.src = "mengmiantu-fight-sprites.png";
-  knockdownImages.fan.src = "dafanfan-knockdown-sprites.png";
-  knockdownImages.yan.src = "xiaoyanyan-knockdown-sprites.png";
-  knockdownImages.blob.src = "huangtuantuan-knockdown-sprites.png";
-  knockdownImages.rabbit.src = "mengmiantu-knockdown-sprites.png";
 
   // Each 3D-rendered sheet is a 4x2 grid: idle, walk, punch, kick,
   // uppercut, sweep, airborne axe kick and guard. Keeping the fighter
@@ -47,20 +50,26 @@
   };
 
   const moves = {
-    punch: { label: "疾风拳", duration: .42, hitAt: .19, reach: 205, damage: 7, knock: 34, color: "#fff4b0", hitbox: { x: 105, y: -245, w: 105, h: 145 } },
-    body: { label: "碎甲重拳", duration: .55, hitAt: .29, reach: 205, damage: 10, knock: 24, color: "#ff9a5c", hitbox: { x: 95, y: -175, w: 112, h: 150 } },
-    uppercut: { label: "超级上勾拳", duration: .78, hitAt: .37, reach: 220, damage: 15, knock: 58, launch: 170, color: "#ffd84d", special: true, hitbox: { x: 105, y: -235, w: 120, h: 245 } },
-    kick: { label: "旋身踢", duration: .55, hitAt: .28, reach: 285, damage: 10, knock: 46, color: "#67eeff", hitbox: { x: 155, y: -225, w: 150, h: 145 } },
-    sweep: { label: "雷霆扫堂腿", duration: .82, hitAt: .46, reach: 315, damage: 14, knock: 72, color: "#8d6cff", special: true, hitbox: { x: 165, y: -78, w: 190, h: 92 } },
-    axe: { label: "螺旋大跳下劈腿", duration: 1.08, hitAt: .67, reach: 265, damage: 18, knock: 84, launch: 105, color: "#ff4fca", special: true, hitbox: { x: 130, y: -210, w: 165, h: 260 } },
-    dash: { label: "流星飞踢", duration: .76, hitAt: .39, reach: 340, damage: 13, knock: 82, color: "#59e8ff", special: true, hitbox: { x: 195, y: -215, w: 180, h: 155 } },
-    ultimate: { label: "大招", duration: 1.58, hitAt: .86, reach: 500, damage: 32, knock: 125, launch: 180, color: "#ffd84d", special: true, ultimate: true, hitbox: { x: 230, y: -220, w: 430, h: 310 } }
+    punch: { label: "疾风拳", duration: .42, hitAt: .18, active: .08, reach: 205, damage: 7, knock: 34, priority: 1, color: "#fff4b0", hitbox: { x: 105, y: -245, w: 105, h: 145 } },
+    body: { label: "碎甲重拳", duration: .55, hitAt: .28, active: .1, reach: 205, damage: 10, knock: 24, priority: 2, color: "#ff9a5c", hitbox: { x: 95, y: -175, w: 112, h: 150 } },
+    uppercut: { label: "超级上勾拳", duration: .78, hitAt: .36, active: .12, reach: 220, damage: 15, knock: 58, launch: 170, priority: 3, color: "#ffd84d", special: true, hitbox: { x: 105, y: -235, w: 120, h: 245 } },
+    kick: { label: "旋身踢", duration: .55, hitAt: .27, active: .11, reach: 285, damage: 10, knock: 46, priority: 2, color: "#67eeff", hitbox: { x: 155, y: -225, w: 150, h: 145 } },
+    sweep: { label: "雷霆扫堂腿", duration: .82, hitAt: .44, active: .14, reach: 315, damage: 14, knock: 72, priority: 3, color: "#8d6cff", special: true, hitbox: { x: 165, y: -78, w: 190, h: 92 } },
+    axe: { label: "螺旋大跳下劈腿", duration: 1.08, hitAt: .65, active: .15, reach: 265, damage: 18, knock: 84, launch: 105, priority: 4, color: "#ff4fca", special: true, hitbox: { x: 130, y: -210, w: 165, h: 260 } },
+    dash: { label: "流星飞踢", duration: .76, hitAt: .37, active: .14, reach: 340, damage: 13, knock: 82, priority: 3, color: "#59e8ff", special: true, hitbox: { x: 195, y: -215, w: 180, h: 155 } },
+    ultimate: { label: "大招", duration: 1.58, hitAt: .84, active: .2, reach: 500, damage: 32, knock: 125, launch: 180, priority: 9, color: "#ffd84d", special: true, ultimate: true, hitbox: { x: 230, y: -220, w: 430, h: 310 } }
   };
 
-  let player, enemy, mode = "select", paused = false, last = performance.now();
+  let player, enemy, mode = "select", paused = false, last = performance.now(), accumulator = 0;
   let timer = 60, shake = 0, freeze = 0, slowMotion = 0, announce = null, aiClock = 0, ultimateFX = null, impactFlash = 0;
-  const particles = [], hitBursts = [], damageTexts = [];
+  const particles = [], hitBursts = [], damageTexts = [], pendingHits = [];
   const input = { x: 0, y: 0, guard: false, keys: new Set() };
+  const match = { type: "versus", difficulty: "standard", playerId: null, enemyId: null, playerWins: 0, enemyWins: 0, round: 1, stats: null };
+  const difficulty = {
+    casual: { thinkMin: .25, thinkJitter: .28, guard: .22, attack: .38, perfect: .08 },
+    standard: { thinkMin: .13, thinkJitter: .18, guard: .42, attack: .57, perfect: .2 },
+    mamba: { thinkMin: .07, thinkJitter: .11, guard: .6, attack: .74, perfect: .34 }
+  };
 
   function buildSpriteCache(id) {
     const img = images[id];
@@ -98,11 +107,6 @@
     return layer;
   }
 
-  Object.entries(images).forEach(([id, img]) => {
-    img.addEventListener("load", () => buildSpriteCache(id), { once: true });
-    if (img.complete && img.naturalWidth) buildSpriteCache(id);
-  });
-
   function buildKnockdownCache(id) {
     const img = knockdownImages[id];
     if (!img || !img.complete || !img.naturalWidth || !roster[id]) return;
@@ -124,10 +128,27 @@
     knockdownImages[id] = null;
   }
 
-  Object.entries(knockdownImages).forEach(([id, img]) => {
-    img.addEventListener("load", () => buildKnockdownCache(id), { once: true });
-    if (img.complete && img.naturalWidth) buildKnockdownCache(id);
-  });
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`无法加载角色素材：${src}`));
+      img.src = src;
+    });
+  }
+
+  function ensureFighterAssets(id) {
+    if (spriteCache[id] && knockdownCache[id]) return Promise.resolve();
+    if (assetPromises[id]) return assetPromises[id];
+    const [fightSrc, knockSrc] = assetSources[id];
+    assetPromises[id] = Promise.all([loadImage(fightSrc), loadImage(knockSrc)]).then(([fight, knock]) => {
+      images[id] = fight; knockdownImages[id] = knock;
+      buildSpriteCache(id); buildKnockdownCache(id);
+      if (!spriteCache[id] || !knockdownCache[id]) throw new Error(`角色素材处理失败：${id}`);
+    });
+    return assetPromises[id];
+  }
 
   function buildBackgroundCache() {
     const base = document.createElement("canvas"), front = document.createElement("canvas");
@@ -145,17 +166,31 @@
     backgroundCache = { base, front };
   }
 
+  function freshStats() {
+    return { attacks: 0, hits: 0, blocked: 0, damageDealt: 0, damageTaken: 0, perfectGuards: 0, maxCombo: 0 };
+  }
+
+  function saveRecord() {
+    if (!match.stats) return;
+    const previous = JSON.parse(localStorage.getItem("mambaRecords") || "{}");
+    previous.maxCombo = Math.max(previous.maxCombo || 0, match.stats.maxCombo);
+    previous.totalWins = (previous.totalWins || 0) + (match.playerWins >= 2 ? 1 : 0);
+    previous.bestDamage = Math.max(previous.bestDamage || 0, Math.round(match.stats.damageDealt));
+    localStorage.setItem("mambaRecords", JSON.stringify(previous));
+  }
+
   class Fighter {
     constructor(id, x, isPlayer) {
       Object.assign(this, roster[id]);
       this.id = id; this.x = x; this.y = FLOOR; this.isPlayer = isPlayer;
-      this.vx = 0; this.vy = 0; this.hp = 100; this.displayHp = 100; this.energy = isPlayer ? 100 : 35;
+      this.vx = 0; this.vy = 0; this.hp = 100; this.displayHp = 100; this.energy = 35;
       this.facing = isPlayer ? 1 : -1; this.action = "idle"; this.actionTime = 0;
       this.hitDone = false; this.guard = false; this.hitFlash = 0; this.hitReact = 0; this.hitReactMax = 0; this.hitDir = 0; this.stun = 0;
       this.aiX = 0; this.aiGuard = false; this.guardMeter = 100; this.guardDelay = 0; this.guardAge = 99;
       this.combo = 0; this.comboTimer = 0; this.comboDamage = 0; this.bufferedAttack = null;
       this.thunderMarks = 0; this.markTimer = 0; this.armorReady = id === "blob"; this.armorCooldown = 0;
       this.knockdown = null; this.knockTimer = 0; this.invulnerable = 0;
+      this.wakeRoll = 0;
     }
     startAttack(name) {
       if (this.stun > 0 || this.action !== "idle" || this.guard || mode !== "fight") return false;
@@ -165,21 +200,45 @@
         ultimateFX = { owner: this, type: this.effect, life: moves.ultimate.duration, max: moves.ultimate.duration };
       }
       this.action = name; this.actionTime = 0; this.hitDone = false;
+      if (this.isPlayer && match.stats) match.stats.attacks += 1;
       announce = { text: name === "ultimate" ? this.ultimate : moves[name].label, color: name === "ultimate" ? this.accent : moves[name].color, life: name === "ultimate" ? 1.35 : .82, owner: this, big: name === "ultimate" };
       return true;
     }
   }
 
-  function startGame(chosen) {
-    player = new Fighter(chosen, 330, true);
+  async function startGame(chosen) {
+    if (mode === "loading") return;
+    mode = "loading";
+    match.type = modeSelect.value;
+    match.difficulty = difficultySelect.value;
+    match.playerId = chosen;
     const rivals = Object.keys(roster).filter(id => id !== chosen);
-    enemy = new Fighter(rivals[Math.floor(Math.random() * rivals.length)], 950, false);
+    match.enemyId = rivals[Math.floor(Math.random() * rivals.length)];
+    match.playerWins = 0; match.enemyWins = 0; match.round = 1; match.stats = freshStats();
+    loadingScreen.classList.remove("hidden");
     selectScreen.classList.add("hidden"); resultScreen.classList.add("hidden");
+    try {
+      await Promise.all([ensureFighterAssets(match.playerId), ensureFighterAssets(match.enemyId)]);
+    } catch (error) {
+      loadingScreen.classList.add("hidden"); selectScreen.classList.remove("hidden"); mode = "select";
+      announce = null; alert(error.message); return;
+    }
+    loadingScreen.classList.add("hidden");
+    beginRound();
+  }
+
+  function beginRound() {
+    player = new Fighter(match.playerId, 330, true);
+    enemy = new Fighter(match.enemyId, 950, false);
+    if (match.type === "training") { player.energy = 100; enemy.energy = 0; }
     touchControls.classList.remove("hidden"); pauseBtn.classList.remove("hidden");
-    mode = "countdown"; paused = false; timer = 60; shake = 0; slowMotion = 0; impactFlash = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0; damageTexts.length = 0;
+    exitBtn.classList.remove("hidden"); resultScreen.classList.add("hidden");
+    mode = "countdown"; paused = false; timer = match.type === "training" ? Infinity : 60; aiClock = 0; shake = 0; slowMotion = 0; impactFlash = 0; ultimateFX = null; particles.length = 0; hitBursts.length = 0; damageTexts.length = 0; pendingHits.length = 0;
+    input.x = input.y = 0; input.guard = false; stick.style.transform = "translate(0,0)";
+    pauseBtn.textContent = "Ⅱ"; pauseBtn.setAttribute("aria-pressed", "false");
     superBtn.classList.remove("ready");
-    announce = { text: "准备！", color: "#ffd84d", life: 1.05, big: true };
-    setTimeout(() => { if (mode === "countdown") { mode = "fight"; announce = { text: "开打！", color: "#ffffff", life: .85, big: true }; } }, 1050);
+    announce = { text: match.type === "training" ? "训练开始" : `第 ${match.round} 回合`, color: "#ffd84d", life: 1.05, big: true };
+    match.countdown = 1.05;
   }
 
   function resolveMove(kind, actor) {
@@ -251,8 +310,16 @@
         if (f.y >= FLOOR) { f.y = FLOOR; f.vy = 0; f.vx = 0; f.knockdown = "down"; f.knockTimer = .68; f.invulnerable = 1.35; shake = Math.max(shake, 9); }
       } else {
         f.y = FLOOR; f.vx = 0; f.vy = 0; f.knockTimer -= dt;
-        if (f.knockdown === "down" && f.knockTimer <= 0) { f.knockdown = "getup"; f.knockTimer = .62; }
-        else if (f.knockdown === "getup" && f.knockTimer <= 0) { f.knockdown = null; f.stun = 0; f.invulnerable = .24; }
+        if (f.knockdown === "down") {
+          const rollInput = f.isPlayer ? input.x : f.aiX;
+          if (Math.abs(rollInput) > .55) f.wakeRoll = Math.sign(rollInput);
+          if (f.knockTimer <= 0) { f.knockdown = "getup"; f.knockTimer = .62; if (!f.isPlayer && Math.random() < .45) f.wakeRoll = Math.random() < .5 ? -1 : 1; }
+        }
+        if (f.knockdown === "getup" && f.wakeRoll) {
+          f.x += f.wakeRoll * 145 * dt;
+          f.x = Math.max(260, Math.min(W - 260, f.x));
+        }
+        if (f.knockdown === "getup" && f.knockTimer <= 0) { f.knockdown = null; f.stun = 0; f.invulnerable = .24; f.wakeRoll = 0; }
       }
       return;
     }
@@ -290,10 +357,10 @@
         if (f.effect === "goo") f.y = FLOOR - Math.sin(up * Math.PI) * 230;
         if (f.effect === "moon") f.x += f.facing * 360 * dt;
       }
-      if (!f.hitDone && f.actionTime >= m.hitAt) {
-        f.hitDone = true;
-        if (moveConnects(f, other, m)) landHit(f, other, m);
-      }
+      const activeEnd = m.hitAt + (m.active || STEP);
+      if (!f.hitDone && f.actionTime >= m.hitAt && f.actionTime <= activeEnd && moveConnects(f, other, m)) {
+        f.hitDone = true; pendingHits.push({ attacker: f, target: other, move: m, action: f.action });
+      } else if (!f.hitDone && f.actionTime > activeEnd) f.hitDone = true;
       const duration = f.id === "yan" && m.special ? m.duration * .88 : m.duration;
       const canCancel = f.bufferedAttack && f.actionTime >= duration * .78 && !m.ultimate;
       if (f.actionTime >= duration || canCancel) {
@@ -304,9 +371,10 @@
     if (f.action === "idle" && f.bufferedAttack && f.stun <= 0 && !f.guard) { const queued = f.bufferedAttack.name; f.bufferedAttack = null; f.startAttack(queued); }
   }
 
-  function landHit(attacker, target, move) {
+  function landHit(attacker, target, move, actionName = attacker.action, deferFinish = false) {
     let blocked = target.guard && target.facing === -attacker.facing;
-    const perfect = blocked && target.guardAge <= .14 && (target.isPlayer || Math.random() < .24);
+    const aiPerfectChance = difficulty[match.difficulty]?.perfect ?? .2;
+    const perfect = blocked && target.guardAge <= .14 && (target.isPlayer || Math.random() < aiPerfectChance);
     let guardBreak = false;
     if (blocked && !perfect) {
       target.guardMeter = Math.max(0, target.guardMeter - (move.damage * (move.ultimate ? 3.7 : move.special ? 3.15 : 2.65)));
@@ -321,6 +389,14 @@
       armored = true; target.armorReady = false; target.armorCooldown = 9; damage *= .5;
     }
     target.hp = Math.max(0, target.hp - damage);
+    if (match.stats) {
+      if (attacker.isPlayer) {
+        if (blocked || perfect) match.stats.blocked += 1; else match.stats.hits += 1;
+        match.stats.damageDealt += damage;
+      }
+      if (target.isPlayer) match.stats.damageTaken += damage;
+      if (perfect && target.isPlayer) match.stats.perfectGuards += 1;
+    }
     target.hitFlash = 1;
     target.hitReactMax = perfect ? .12 : blocked ? .18 : armored ? .2 : move.ultimate ? .62 : move.special ? .42 : .3;
     target.hitReact = target.hitReactMax;
@@ -338,16 +414,17 @@
     if (!blocked && !perfect) {
       attacker.combo = attacker.comboTimer > 0 ? attacker.combo + 1 : 1;
       attacker.comboTimer = 1.05; attacker.comboDamage += damage;
+      if (attacker.isPlayer && match.stats) match.stats.maxCombo = Math.max(match.stats.maxCombo, attacker.combo);
       target.combo = 0; target.comboTimer = 0; target.comboDamage = 0;
     }
     if (!move.ultimate) attacker.energy = Math.min(100, attacker.energy + (blocked ? 10 : move.damage * 2.2));
     target.energy = Math.min(100, target.energy + damage * 1.25);
     shake = perfect ? 12 : guardBreak ? 21 : blocked ? 5 : (move.ultimate ? 28 : move.special ? 17 : 10); freeze = perfect ? .035 : guardBreak ? .09 : blocked ? .025 : move.ultimate ? .12 : .055;
     impactFlash = Math.max(impactFlash, perfect ? .32 : guardBreak ? .48 : blocked ? .12 : move.ultimate ? .62 : move.special ? .38 : .24);
-    const strikeY = attacker.action === "sweep" ? attacker.y - 72
-      : attacker.action === "uppercut" ? attacker.y - 285
-      : attacker.action === "axe" ? attacker.y - 135
-      : attacker.action === "kick" || attacker.action === "dash" ? attacker.y - 210
+    const strikeY = actionName === "sweep" ? attacker.y - 72
+      : actionName === "uppercut" ? attacker.y - 285
+      : actionName === "axe" ? attacker.y - 135
+      : actionName === "kick" || actionName === "dash" ? attacker.y - 210
       : attacker.y - 245;
     const strikeX = attacker.x + attacker.facing * Math.min(move.hitbox.x + move.hitbox.w * .28, Math.abs(target.x - attacker.x) * .72);
     burst(strikeX, strikeY, perfect ? "#ffffff" : attacker.accent, perfect ? 28 : guardBreak ? 34 : blocked ? 8 : move.ultimate ? 48 : 18, attacker.effect);
@@ -358,30 +435,58 @@
       target.thunderMarks += 1; target.markTimer = 4;
       if (target.thunderMarks >= 3) {
         target.thunderMarks = 0; target.hp = Math.max(0, target.hp - 8); target.hitFlash = 1; target.stun = Math.max(target.stun, .34); attacker.energy = Math.min(100, attacker.energy + 18);
+        if (attacker.isPlayer && match.stats) match.stats.damageDealt += 8;
+        if (target.isPlayer && match.stats) match.stats.damageTaken += 8;
         burst(target.x, target.y - 220, "#ffd84d", 34, "thunder"); shake = Math.max(shake, 18); impactFlash = Math.max(impactFlash, .42);
         damageTexts.push({ x: target.x, y: target.y - 385, value: 8, blocked: false, label: "雷印爆发", color: "#ffd84d", life: 1, max: 1 });
         announce = { text: "三重雷印爆发！", color: "#ffd84d", life: 1, owner: attacker, big: true };
       }
     }
     if (perfect && target.id === "rabbit") burst(attacker.x, attacker.y - 220, "#ffe458", 24, "moon");
-    if (target.hp <= 0) { beginKnockdown(target, attacker.facing, true); finish(attacker, target); }
-    else if (attacker.hp <= 0) { beginKnockdown(attacker, -attacker.facing, true); finish(target, attacker); }
+    if (!deferFinish) {
+      if (target.hp <= 0) { beginKnockdown(target, attacker.facing, true); finish(attacker, target); }
+      else if (attacker.hp <= 0) { beginKnockdown(attacker, -attacker.facing, true); finish(target, attacker); }
+    }
+  }
+
+  function resolvePendingHits() {
+    if (!pendingHits.length) return;
+    const hits = pendingHits.splice(0, pendingHits.length);
+    for (const hit of hits) landHit(hit.attacker, hit.target, hit.move, hit.action, true);
+    if (match.type === "training") {
+      if (enemy.hp <= 0) { beginKnockdown(enemy, player.facing, true); mode = "training-reset"; match.finishTimer = 1.25; announce = { text: "训练击倒！", color: "#ffd84d", life: 1, big: true }; }
+      if (player.hp <= 0) { player.hp = 100; player.displayHp = 100; player.invulnerable = .5; }
+      return;
+    }
+    if (player.hp <= 0 && enemy.hp <= 0) { beginKnockdown(player, -player.facing, true); beginKnockdown(enemy, player.facing, true); finish(null, null); }
+    else if (enemy.hp <= 0) { beginKnockdown(enemy, player.facing, true); finish(player, enemy); }
+    else if (player.hp <= 0) { beginKnockdown(player, enemy.facing, true); finish(enemy, player); }
   }
 
   function updateAI(dt) {
+    if (match.type === "training") { enemy.aiX = 0; enemy.aiGuard = false; return; }
     aiClock -= dt;
     if (aiClock > 0 || !enemy || mode !== "fight") return;
-    aiClock = .12 + Math.random() * .2;
+    const cfg = difficulty[match.difficulty] || difficulty.standard;
+    aiClock = cfg.thinkMin + Math.random() * cfg.thinkJitter;
     const dist = Math.abs(player.x - enemy.x);
-    enemy.aiGuard = enemy.guardMeter > 14 && player.action !== "idle" && Math.random() < .44;
+    const playerThreat = player.action !== "idle" && dist <= (moves[player.action]?.reach || 230) + 55;
+    enemy.aiGuard = enemy.guardMeter > 14 && playerThreat && Math.random() < cfg.guard;
     if (enemy.stun > 0 || enemy.action !== "idle") { enemy.aiX = 0; return; }
     if (enemy.energy >= 100 && dist < 410 && !enemy.aiGuard) { enemy.startAttack("ultimate"); return; }
-    if (dist > 260) enemy.aiX = Math.sign(player.x - enemy.x);
-    else if (dist < 115) enemy.aiX = -Math.sign(player.x - enemy.x) * (Math.random() < .35 ? 1 : 0);
+    if (enemy.guardMeter < 24 || enemy.hp < 22 && player.hp > enemy.hp) enemy.aiX = -Math.sign(player.x - enemy.x);
+    else if (dist > 300) enemy.aiX = Math.sign(player.x - enemy.x);
+    else if (dist < 110) enemy.aiX = -Math.sign(player.x - enemy.x) * (Math.random() < .55 ? 1 : 0);
     else enemy.aiX = 0;
-    if (dist < 245 && !enemy.aiGuard && Math.random() < .56) {
+    if (!enemy.aiGuard && Math.random() < cfg.attack) {
       const r = Math.random();
-      enemy.startAttack(r < .2 ? "punch" : r < .39 ? "kick" : r < .57 ? "uppercut" : r < .75 ? "sweep" : r < .9 ? "dash" : "axe");
+      let move = null;
+      if (player.y < FLOOR - 80 && dist < 235) move = "uppercut";
+      else if (dist > 245 && dist < 355) move = "dash";
+      else if (dist < 135 && player.guard && r < .55) move = "body";
+      else if (dist < 220) move = r < .22 ? "punch" : r < .46 ? "kick" : r < .68 ? "sweep" : r < .86 ? "uppercut" : "axe";
+      else if (dist < 285) move = r < .62 ? "kick" : "dash";
+      if (move) enemy.startAttack(move);
     }
   }
 
@@ -394,13 +499,43 @@
     if (mode === "finishing" || mode === "over") return;
     mode = "finishing"; input.guard = false; touchControls.classList.add("hidden"); pauseBtn.classList.add("hidden");
     if (loser && !loser.knockdown) beginKnockdown(loser, winner.facing, true);
-    announce = { text: "K.O.", color: "#ffd84d", life: 1.25, big: true };
-    setTimeout(() => {
-      mode = "over";
-      resultTitle.textContent = `${winner.name}胜利`;
-      resultDetail.textContent = winner.isPlayer ? "这套连招，漂亮！" : "电脑拿下一局，再战一次吧。";
-      resultScreen.classList.remove("hidden");
-    }, 1450);
+    if (winner?.isPlayer) match.playerWins += 1;
+    else if (winner) match.enemyWins += 1;
+    match.roundWinner = winner;
+    match.finishTimer = 1.45;
+    announce = { text: winner ? "K.O." : "双重 K.O.", color: "#ffd84d", life: 1.25, big: true };
+  }
+
+  function showResult() {
+    mode = "over";
+    const winner = match.roundWinner;
+    const matchOver = match.playerWins >= 2 || match.enemyWins >= 2;
+    resultTitle.textContent = winner ? `${winner.name}胜利` : "双方战平";
+    resultDetail.textContent = matchOver
+      ? `${match.playerWins} : ${match.enemyWins} · ${match.playerWins >= 2 ? "你赢得整场对决！" : "电脑赢得整场对决"}`
+      : `${match.playerWins} : ${match.enemyWins} · ${winner?.isPlayer ? "漂亮的一局！" : winner ? "调整节奏，下一局扳回来" : "下一局继续决胜"}`;
+    const s = match.stats || freshStats();
+    resultStats.innerHTML = [
+      [s.maxCombo, "最高连击"], [Math.round(s.damageDealt), "造成伤害"],
+      [s.perfectGuards, "精准格挡"], [s.attacks ? `${Math.round(s.hits / s.attacks * 100)}%` : "0%", "命中率"]
+    ].map(([value, label]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
+    document.getElementById("rematchBtn").textContent = matchOver ? "再战一场" : "下一回合";
+    if (matchOver) saveRecord();
+    resultScreen.classList.remove("hidden");
+  }
+
+  function continueMatch() {
+    const matchOver = match.playerWins >= 2 || match.enemyWins >= 2;
+    if (matchOver) { match.playerWins = 0; match.enemyWins = 0; match.round = 1; match.stats = freshStats(); }
+    else match.round += 1;
+    beginRound();
+  }
+
+  function returnToSelection() {
+    mode = "select"; paused = false; player = enemy = null; accumulator = 0;
+    input.x = input.y = 0; input.guard = false; input.keys.clear();
+    touchControls.classList.add("hidden"); pauseBtn.classList.add("hidden"); exitBtn.classList.add("hidden");
+    resultScreen.classList.add("hidden"); loadingScreen.classList.add("hidden"); selectScreen.classList.remove("hidden");
   }
 
   function drawBackground(t) {
@@ -523,8 +658,10 @@
     const pad = 34, barW = 420, y = 32;
     healthBar(pad, y, barW, player.hp / 100, player, false);
     healthBar(W - pad - barW, y, barW, enemy.hp / 100, enemy, true);
-    ctx.textAlign = "center"; ctx.font = "1000 42px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(Math.max(0, Math.ceil(timer)).toString().padStart(2, "0"), W / 2, 70);
-    ctx.font = "800 13px system-ui"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillText("ROUND 1", W / 2, 91);
+    ctx.textAlign = "center"; ctx.font = "1000 42px system-ui"; ctx.fillStyle = "#fff";
+    ctx.fillText(match.type === "training" ? "∞" : Math.max(0, Math.ceil(timer)).toString().padStart(2, "0"), W / 2, 70);
+    ctx.font = "800 13px system-ui"; ctx.fillStyle = "rgba(255,255,255,.55)";
+    ctx.fillText(match.type === "training" ? "TRAINING" : `ROUND ${match.round} · ${match.playerWins} - ${match.enemyWins}`, W / 2, 91);
     drawCombo(player, 248, 168, false); drawCombo(enemy, W - 248, 168, true);
     superBtn.classList.toggle("ready", player.energy >= 100 && mode === "fight");
   }
@@ -628,17 +765,41 @@
     }
   }
 
+  function stepGame(realStep) {
+    if (paused) return;
+    let simStep = realStep;
+    if (slowMotion > 0) { slowMotion = Math.max(0, slowMotion - realStep); simStep *= .24; }
+    if (freeze > 0) { freeze = Math.max(0, freeze - realStep); simStep = 0; }
+    if (!player || !enemy) return;
+    if (mode === "countdown") {
+      match.countdown -= realStep;
+      if (simStep > 0) { updateFighter(player, enemy, simStep); updateFighter(enemy, player, simStep); resolvePendingHits(); }
+      if (match.countdown <= 0) { mode = "fight"; announce = { text: match.type === "training" ? "自由训练" : "开打！", color: "#ffffff", life: .85, big: true }; }
+    } else if (mode === "fight") {
+      if (Number.isFinite(timer)) timer -= realStep;
+      if (simStep > 0) { updateAI(simStep); updateFighter(player, enemy, simStep); updateFighter(enemy, player, simStep); resolvePendingHits(); }
+      if (timer <= 0 && mode === "fight") {
+        if (Math.abs(player.hp - enemy.hp) < .01) finish(null, null);
+        else { const winner = player.hp > enemy.hp ? player : enemy; finish(winner, winner === player ? enemy : player); }
+      }
+    } else if (mode === "finishing") {
+      if (simStep > 0) { updateFighter(player, enemy, simStep); updateFighter(enemy, player, simStep); }
+      match.finishTimer -= realStep;
+      if (match.finishTimer <= 0) showResult();
+    } else if (mode === "training-reset") {
+      if (simStep > 0) { updateFighter(player, enemy, simStep); updateFighter(enemy, player, simStep); }
+      match.finishTimer -= realStep;
+      if (match.finishTimer <= 0) beginRound();
+    }
+  }
+
   function loop(now) {
-    let dt = Math.min(.033, (now - last) / 1000); last = now;
-    if (slowMotion > 0) { slowMotion = Math.max(0, slowMotion - dt); dt *= .24; }
-    if (freeze > 0) { freeze -= dt; dt = 0; }
-    if (!paused) {
-      if (mode === "fight") { timer -= dt; updateAI(dt); updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); if (timer <= 0) { const winner = player.hp >= enemy.hp ? player : enemy; finish(winner, winner === player ? enemy : player); } }
-      else if (mode === "finishing" && player) { updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); }
-      else if (mode === "countdown" && player) { updateFighter(player, enemy, dt); updateFighter(enemy, player, dt); }
-    } else dt = 0;
+    const realDt = Math.min(.1, (now - last) / 1000); last = now;
+    accumulator = Math.min(.25, accumulator + realDt);
+    while (accumulator >= STEP) { stepGame(STEP); accumulator -= STEP; }
+    const visualDt = paused || freeze > 0 ? 0 : realDt * (slowMotion > 0 ? .24 : 1);
     ctx.save(); if (shake > .2) { ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake); shake *= .82; }
-    drawBackground(now / 1000); if (player && enemy) { const order = player.x < enemy.x ? [player, enemy] : [enemy, player]; drawFighter(order[0], now / 1000); drawFighter(order[1], now / 1000); } drawEffects(dt); drawHUD();
+    drawBackground(now / 1000); if (player && enemy) { const order = player.x < enemy.x ? [player, enemy] : [enemy, player]; drawFighter(order[0], now / 1000); drawFighter(order[1], now / 1000); } drawEffects(visualDt); drawHUD();
     if (paused) { ctx.fillStyle = "rgba(5,3,12,.58)"; ctx.fillRect(0,0,W,H); ctx.textAlign = "center"; ctx.font = "1000 72px system-ui"; ctx.fillStyle = "white"; ctx.fillText("暂停", W/2, H/2); }
     ctx.restore(); requestAnimationFrame(loop);
   }
@@ -668,14 +829,15 @@
 
   document.addEventListener("keydown", e => {
     input.keys.add(e.code); if (["ArrowLeft","KeyA"].includes(e.code)) input.x = -1; if (["ArrowRight","KeyD"].includes(e.code)) input.x = 1; if (["ArrowUp","KeyW"].includes(e.code)) input.y = -1; if (["ArrowDown","KeyS"].includes(e.code)) input.y = 1;
-    if (e.code === "KeyJ") chooseMove("punch"); if (e.code === "KeyK") chooseMove("kick"); if (e.code === "KeyL") input.guard = true; if (e.code === "KeyU") triggerUltimate();
+    if (!e.repeat && e.code === "KeyJ") chooseMove("punch"); if (!e.repeat && e.code === "KeyK") chooseMove("kick"); if (e.code === "KeyL") input.guard = true; if (!e.repeat && e.code === "KeyU") triggerUltimate();
   });
   document.addEventListener("keyup", e => { input.keys.delete(e.code); if (![...input.keys].some(k => ["ArrowLeft","KeyA","ArrowRight","KeyD"].includes(k))) input.x = 0; if (![...input.keys].some(k => ["ArrowUp","KeyW","ArrowDown","KeyS"].includes(k))) input.y = 0; if (e.code === "KeyL") input.guard = false; });
   document.querySelectorAll("[data-fighter]").forEach(b => b.addEventListener("click", () => startGame(b.dataset.fighter)));
-  document.getElementById("rematchBtn").addEventListener("click", () => startGame(player.id));
-  document.getElementById("changeBtn").addEventListener("click", () => { mode = "select"; player = enemy = null; resultScreen.classList.add("hidden"); selectScreen.classList.remove("hidden"); });
-  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "▶" : "Ⅱ"; });
-  document.addEventListener("visibilitychange", () => { if (document.hidden && mode === "fight") paused = true; });
+  document.getElementById("rematchBtn").addEventListener("click", continueMatch);
+  document.getElementById("changeBtn").addEventListener("click", returnToSelection);
+  exitBtn.addEventListener("click", returnToSelection);
+  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "▶" : "Ⅱ"; pauseBtn.setAttribute("aria-pressed", String(paused)); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && ["fight","countdown","finishing","training-reset"].includes(mode)) { paused = true; pauseBtn.textContent = "▶"; pauseBtn.setAttribute("aria-pressed", "true"); } });
 
   requestAnimationFrame(loop);
 })();

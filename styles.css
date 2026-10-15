@@ -23,6 +23,10 @@ button { font: inherit; color: inherit; }
 .eyebrow { color: var(--yellow); font-size: clamp(.75rem, 1.25vw, 1rem); font-weight: 900; letter-spacing: .18em; margin: 0 0 8px; }
 h1 { margin: 0; max-width: 5ch; font-size: clamp(3rem, 7.2vw, 7.5rem); font-weight: 1000; line-height: .84; letter-spacing: -.075em; text-shadow: 0 8px 0 #441692, 0 16px 30px rgba(0,0,0,.5); }
 .select-tip { margin: 24px 0 0; color: var(--muted); font-size: clamp(.9rem, 1.5vw, 1.15rem); }
+.game-options { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.game-options label { display: grid; gap: 5px; color: var(--muted); font-size: .72rem; font-weight: 900; letter-spacing: .08em; }
+.game-options select { min-width: 118px; border: 1px solid rgba(255,255,255,.2); border-radius: 11px; padding: 9px 28px 9px 11px; background: rgba(255,255,255,.08); color: white; font-weight: 800; outline: none; }
+.game-options select:focus-visible { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(255,216,77,.2); }
 .fighter-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; gap: clamp(8px, 1vw, 14px); min-width: 0; height: min(68vh, 600px); }
 .fighter-card { position: relative; flex: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.18); border-radius: 26px; padding: 0; background: linear-gradient(160deg, rgba(255,255,255,.09), rgba(255,255,255,.025)); cursor: pointer; transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease; }
 .fighter-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 30%, var(--glow), transparent 55%); opacity: .45; }
@@ -59,11 +63,21 @@ h1 { margin: 0; max-width: 5ch; font-size: clamp(3rem, 7.2vw, 7.5rem); font-weig
 .super.ready { opacity: 1; filter: none; animation: ultimatePulse .78s ease-in-out infinite alternate; }
 @keyframes ultimatePulse { to { transform: scale(1.08); box-shadow: 0 8px 0 #754315, 0 0 34px #ffd84d, inset 0 2px 4px rgba(255,255,255,.45); } }
 .pause-button { position: absolute; z-index: 7; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 44px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; background: rgba(10,5,20,.55); backdrop-filter: blur(8px); cursor: pointer; }
+.exit-button { position: absolute; z-index: 7; top: max(14px, env(safe-area-inset-top)); left: calc(50% + 54px); width: 44px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; background: rgba(10,5,20,.55); backdrop-filter: blur(8px); cursor: pointer; }
+.loading-screen { position: absolute; z-index: 30; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; background: rgba(7,4,13,.9); text-align: center; }
+.loading-screen strong { font-size: clamp(1.5rem, 3vw, 2.6rem); }
+.loading-screen span { color: var(--muted); }
+.loading-spinner { width: 58px; height: 58px; border: 5px solid rgba(255,255,255,.12); border-top-color: var(--yellow); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .result-screen { position: absolute; z-index: 20; inset: 0; display: grid; place-content: center; justify-items: center; background: rgba(6,3,13,.75); backdrop-filter: blur(12px); text-align: center; }
 .result-kicker { margin: 0; color: var(--yellow); font-size: clamp(4rem, 11vw, 9rem); font-style: italic; font-weight: 1000; line-height: .8; transform: rotate(-5deg); text-shadow: 0 10px 0 #7a2f18; }
 .result-screen h2 { margin: 28px 0 8px; font-size: clamp(2rem, 4vw, 4rem); }
 .result-screen p:not(.result-kicker) { margin: 0 0 26px; color: var(--muted); }
+.result-stats { display: grid; grid-template-columns: repeat(4, minmax(82px,1fr)); gap: 8px; width: min(620px, 86vw); margin: -10px 0 22px; }
+.result-stats div { padding: 9px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.06); }
+.result-stats strong { display: block; color: var(--yellow); font-size: 1.2rem; }
+.result-stats span { color: var(--muted); font-size: .68rem; }
 .result-actions { display: flex; gap: 12px; }
 .result-actions button { min-width: 138px; padding: 13px 20px; border: 0; border-radius: 14px; background: var(--yellow); color: #160b22; font-weight: 1000; cursor: pointer; }
 .result-actions .secondary { background: rgba(255,255,255,.1); color: white; border: 1px solid rgba(255,255,255,.16); }
@@ -82,6 +96,9 @@ h1 { margin: 0; max-width: 5ch; font-size: clamp(3rem, 7.2vw, 7.5rem); font-weig
   .move-legend { left: 24px; bottom: 9px; }
   .touch-controls { bottom: 8px; }
   .joystick-wrap > span { display: none; }
+  .game-options { margin-top: 10px; }
+  .game-options select { padding-block: 6px; }
+  .result-stats { grid-template-columns: repeat(4, minmax(70px,1fr)); margin-bottom: 14px; }
 }
 @media (orientation: portrait) and (max-width: 820px) { .rotate-notice { display: grid; } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
