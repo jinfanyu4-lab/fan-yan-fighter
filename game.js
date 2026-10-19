@@ -28,7 +28,8 @@
     fan: ["dafanfan-fight-sprites.png", "dafanfan-knockdown-sprites.png"],
     yan: ["xiaoyanyan-fight-sprites.png", "xiaoyanyan-knockdown-sprites.png"],
     blob: ["huangtuantuan-fight-sprites.png", "huangtuantuan-knockdown-sprites.png"],
-    rabbit: ["mengmiantu-fight-sprites.png", "mengmiantu-knockdown-sprites.png"]
+    rabbit: ["mengmiantu-fight-sprites.png", "mengmiantu-knockdown-sprites.png"],
+    heartfrog: ["xindongwa-fight-sprites.png", "xindongwa-knockdown-sprites.png"]
   };
   const spriteCache = {};
   const knockdownCache = {};
@@ -46,7 +47,8 @@
     fan: { name: "大帆帆", color: "#ff4f7b", accent: "#ffd84d", speed: 280, power: 1.08, scale: 1.03, effect: "thunder", ultimate: "雷霆曼巴升龙", ultimatePose: "uppercut" },
     yan: { name: "小颜颜", color: "#59e8ff", accent: "#8d4dff", speed: 320, power: .96, scale: .98, effect: "rotor", ultimate: "旋翼风暴", ultimatePose: "axe" },
     blob: { name: "奶蛙", color: "#ffc93d", accent: "#ff7a26", speed: 245, power: 1.15, scale: 1.04, effect: "goo", ultimate: "熔金陨星", ultimatePose: "axe" },
-    rabbit: { name: "美团鼠", color: "#ffe458", accent: "#1b102e", speed: 335, power: .94, scale: .97, effect: "moon", ultimate: "暗月连舞", ultimatePose: "kick" }
+    rabbit: { name: "美团鼠", color: "#ffe458", accent: "#1b102e", speed: 335, power: .94, scale: .97, effect: "moon", ultimate: "暗月连舞", ultimatePose: "kick" },
+    heartfrog: { name: "心动蛙", color: "#ff4d87", accent: "#ff9ac0", speed: 265, power: 1.07, scale: 1.01, renderAspect: .94, effect: "heart", ultimate: "万箭穿心", ultimatePose: "punch" }
   };
 
   const moves = {
@@ -75,8 +77,8 @@
     const img = images[id];
     if (!img || !img.complete || !img.naturalWidth || !roster[id]) return;
     const cellW = img.naturalWidth / 4, cellH = img.naturalHeight / 2;
-    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465 }[id] || 470) * roster[id].scale;
-    const width = height * (cellW / cellH), pad = 42;
+    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465, heartfrog: 475 }[id] || 470) * roster[id].scale;
+    const width = height * (roster[id].renderAspect || cellW / cellH), pad = 42;
     const frames = [];
     for (let frame = 0; frame < 8; frame++) {
       const layer = document.createElement("canvas");
@@ -111,7 +113,7 @@
     const img = knockdownImages[id];
     if (!img || !img.complete || !img.naturalWidth || !roster[id]) return;
     const cellW = img.naturalWidth / 3, cellH = img.naturalHeight;
-    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465 }[id] || 470) * roster[id].scale;
+    const height = ({ fan: 500, yan: 470, blob: 475, rabbit: 465, heartfrog: 475 }[id] || 470) * roster[id].scale;
     const width = height * (cellW / cellH), pad = 42, frames = [];
     for (let frame = 0; frame < 3; frame++) {
       const layer = document.createElement("canvas");
@@ -273,10 +275,10 @@
     const box = move.hitbox;
     const localX = (target.x - attacker.x) * attacker.facing;
     const attackLeft = box.x - box.w / 2, attackRight = box.x + box.w / 2;
-    const targetRadius = target.id === "fan" ? 54 : target.id === "yan" ? 66 : 62;
+    const targetRadius = target.id === "fan" ? 54 : target.id === "yan" ? 66 : target.id === "heartfrog" ? 68 : 62;
     if (localX + targetRadius < attackLeft || localX - targetRadius > attackRight) return false;
     const attackTop = attacker.y + box.y - box.h / 2, attackBottom = attacker.y + box.y + box.h / 2;
-    const targetTop = target.y - (target.id === "fan" ? 420 : 390), targetBottom = target.y - 24;
+    const targetTop = target.y - (target.id === "fan" ? 420 : target.id === "heartfrog" ? 400 : 390), targetBottom = target.y - 24;
     return attackBottom >= targetTop && attackTop <= targetBottom;
   }
 
@@ -356,6 +358,7 @@
         if (f.effect === "rotor") { f.y = FLOOR - Math.sin(up * Math.PI) * 120; f.x += f.facing * 170 * dt; }
         if (f.effect === "goo") f.y = FLOOR - Math.sin(up * Math.PI) * 230;
         if (f.effect === "moon") f.x += f.facing * 360 * dt;
+        if (f.effect === "heart") { f.y = FLOOR - Math.sin(up * Math.PI) * 72; f.x += f.facing * 245 * dt; }
       }
       const activeEnd = m.hitAt + (m.active || STEP);
       if (!f.hitDone && f.actionTime >= m.hitAt && f.actionTime <= activeEnd && moveConnects(f, other, m)) {
@@ -416,6 +419,14 @@
       attacker.comboTimer = 1.05; attacker.comboDamage += damage;
       if (attacker.isPlayer && match.stats) match.stats.maxCombo = Math.max(match.stats.maxCombo, attacker.combo);
       target.combo = 0; target.comboTimer = 0; target.comboDamage = 0;
+    }
+    if (!blocked && !perfect && attacker.id === "heartfrog" && damage > 0) {
+      const healing = Math.min(100 - attacker.hp, Math.max(1, Math.round(damage * .22)));
+      if (healing > 0) {
+        attacker.hp += healing; attacker.displayHp = Math.max(attacker.displayHp, attacker.hp);
+        damageTexts.push({ x: attacker.x, y: attacker.y - 365, value: 0, blocked: false, label: `心动汲取 +${healing}`, color: "#ff9ac0", life: .9, max: .9 });
+        burst(attacker.x, attacker.y - 250, "#ff5d9b", 9, "heart");
+      }
     }
     if (!move.ultimate) attacker.energy = Math.min(100, attacker.energy + (blocked ? 10 : move.damage * 2.2));
     target.energy = Math.min(100, target.energy + damage * 1.25);
@@ -576,6 +587,7 @@
         if (f.effect === "rotor") angle = f.facing * p * Math.PI * 2.4;
         if (f.effect === "goo") { sx = 1 + .13 * snap; sy = 1 - .09 * snap; }
         if (f.effect === "moon") { dx = f.facing * 34 * snap; angle = f.facing * -.16 * snap; }
+        if (f.effect === "heart") { dx = f.facing * 38 * snap; sx = 1 + .1 * snap; sy = 1 - .05 * snap; }
       }
     } else if (!isDown) {
       dy = Math.sin(t * 4.8 + (f.isPlayer ? 0 : 2.4)) * 3;
@@ -694,7 +706,8 @@
     if (f.id === "fan") return "雷印引爆";
     if (f.id === "yan") return "旋翼迅击";
     if (f.id === "blob") return f.armorReady ? "熔金霸体 READY" : `霸体 ${Math.ceil(f.armorCooldown)}s`;
-    return "暗月反击";
+    if (f.id === "rabbit") return "暗月反击";
+    return "心动汲取 22%";
   }
 
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, Math.max(0, w), h, r); }
@@ -718,9 +731,20 @@
       ctx.fillStyle = `rgba(3,1,12,${.56 * Math.sin(k * Math.PI)})`; ctx.fillRect(0, 0, W, H);
       ctx.strokeStyle = "#ffe35d"; ctx.shadowColor = "#ffe35d"; ctx.shadowBlur = 20; ctx.lineWidth = 11;
       for (let n = 0; n < 5; n++) { ctx.globalAlpha = .78 - n * .1; ctx.beginPath(); ctx.arc(a.x + a.facing * (60 + n * 58), a.y - 210 + Math.sin(n * 2) * 50, 60 + n * 14, -.95, .95); ctx.stroke(); }
+    } else if (ultimateFX.type === "heart") {
+      ctx.fillStyle = `rgba(77,2,39,${.42 * Math.sin(k * Math.PI)})`; ctx.fillRect(0, 0, W, H);
+      ctx.translate(a.x + a.facing * 105, a.y - 235); ctx.strokeStyle = a.accent; ctx.fillStyle = a.color; ctx.shadowColor = "#ff2e77"; ctx.shadowBlur = 28;
+      for (let n = 0; n < 6; n++) { const size = 22 + n * 20 + k * 95; ctx.globalAlpha = .8 - n * .09; ctx.lineWidth = Math.max(3, 11 - n); drawHeartPath(ctx, a.facing * (n * 48 + k * 95), Math.sin(n * 1.8) * 42, size); ctx.stroke(); }
     }
     ctx.restore();
     if (ultimateFX.life <= 0) ultimateFX = null;
+  }
+
+  function drawHeartPath(target, x, y, size) {
+    target.beginPath(); target.moveTo(x, y + size * .3);
+    target.bezierCurveTo(x - size * .95, y - size * .3, x - size * .42, y - size, x, y - size * .42);
+    target.bezierCurveTo(x + size * .42, y - size, x + size * .95, y - size * .3, x, y + size * .3);
+    target.closePath();
   }
 
   function drawEffects(dt) {
@@ -736,6 +760,7 @@
       if (p.kind === "thunder") { ctx.rotate(Math.PI / 4); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); }
       else if (p.kind === "rotor") { ctx.beginPath(); ctx.moveTo(-p.size * 2.4, 0); ctx.lineTo(p.size * 2.4, 0); ctx.stroke(); }
       else if (p.kind === "goo") { ctx.beginPath(); ctx.arc(0, 0, p.size * .72, 0, Math.PI * 2); ctx.fill(); }
+      else if (p.kind === "heart") { drawHeartPath(ctx, 0, 0, p.size * 1.35); ctx.fill(); }
       else { ctx.beginPath(); ctx.arc(0, 0, p.size, -.9, .9); ctx.stroke(); }
       ctx.restore();
     }
@@ -746,6 +771,7 @@
       if (b.kind === "thunder") { for (let n = 0; n < 6; n++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(62 + k * 90, 0); ctx.stroke(); } }
       else if (b.kind === "rotor") { for (let n = 0; n < 3; n++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.ellipse(50 + k * 55, 0, 62, 13, 0, 0, Math.PI * 2); ctx.stroke(); } }
       else if (b.kind === "goo") { ctx.fillStyle = b.color; for (let n = 0; n < 9; n++) { const q = n / 9 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(q) * (28 + k * 120), Math.sin(q) * (18 + k * 72), 12 * (1 - k), 0, Math.PI * 2); ctx.fill(); } }
+      else if (b.kind === "heart") { for (let n = 0; n < 4; n++) { const q = n / 4 * Math.PI * 2; drawHeartPath(ctx, Math.cos(q) * (20 + k * 125), Math.sin(q) * (14 + k * 78), 30 * (1 - k)); ctx.stroke(); } }
       else { for (let n = 0; n < 4; n++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.arc(0, 0, 34 + k * 108 + n * 8, -.7, .7); ctx.stroke(); } }
       ctx.restore();
     }
