@@ -29,7 +29,7 @@
     yan: ["xiaoyanyan-fight-sprites.png", "xiaoyanyan-knockdown-sprites.png"],
     blob: ["huangtuantuan-fight-sprites.png", "huangtuantuan-knockdown-sprites.png"],
     rabbit: ["mengmiantu-fight-sprites.png", "mengmiantu-knockdown-sprites.png"],
-    heartfrog: ["xindongwa-fight-sprites.png", "xindongwa-knockdown-sprites.png"]
+    heartfrog: ["xindongwa-fight-v1.png", "xindongwa-knockdown-v1.png"]
   };
   const spriteCache = {};
   const knockdownCache = {};
